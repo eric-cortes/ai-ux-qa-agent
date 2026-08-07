@@ -1,0 +1,12 @@
+node_modules
+.pnpm-store
+.next
+.env
+.env.*
+__pycache__/
+.pytest_cache/
+.venv/
+storage/artifacts/*
+!storage/artifacts/.gitkeep
+*.pyc
+.DS_Store

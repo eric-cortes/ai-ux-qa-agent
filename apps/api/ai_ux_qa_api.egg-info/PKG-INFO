@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: ai-ux-qa-api
+Version: 0.0.1
+Summary: FastAPI service for AI UX QA Agent
+Requires-Python: >=3.11
+Requires-Dist: fastapi>=0.116.1
+Requires-Dist: uvicorn[standard]>=0.35.0
+Requires-Dist: sqlalchemy>=2.0.43
+Requires-Dist: psycopg[binary]>=3.2.9
+Requires-Dist: pydantic-settings>=2.10.1
+Requires-Dist: email-validator>=2.2.0
+Requires-Dist: redis>=6.4.0
+Requires-Dist: celery>=5.5.3
+Requires-Dist: httpx>=0.28.1
