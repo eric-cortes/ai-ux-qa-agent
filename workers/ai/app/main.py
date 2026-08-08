@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -14,19 +14,36 @@ except Exception:  # pragma: no cover
     OpenAI = None  # type: ignore
 
 
+VALID_CATEGORIES = {"ux", "accessibility", "functional", "network", "performance"}
+VALID_SEVERITIES = {"low", "medium", "high", "critical"}
+
+FindingCategory = Literal["ux", "accessibility", "functional", "network", "performance"]
+FindingSeverity = Literal["low", "medium", "high", "critical"]
+
+
 class Finding(BaseModel):
     id: str
     run_id: str
-    category: str
+    category: FindingCategory
     title: str
     description: str
-    severity: str
+    severity: FindingSeverity
     confidence: float
     page_url: str
     observed_behavior: str
     reproduction_steps: list[str]
     evidence_ids: list[str]
     status: str = "open"
+
+
+def normalize_category(value: Any) -> FindingCategory:
+    normalized = str(value or "ux").strip().lower()
+    return normalized if normalized in VALID_CATEGORIES else "ux"
+
+
+def normalize_severity(value: Any) -> FindingSeverity:
+    normalized = str(value or "medium").strip().lower()
+    return normalized if normalized in VALID_SEVERITIES else "medium"
 
 
 SYSTEM_PROMPT = """
@@ -150,10 +167,10 @@ def generate_with_openai(run_id: str, evidence: dict[str, Any]) -> list[Finding]
                 Finding(
                     id=f"finding_{uuid4().hex[:8]}",
                     run_id=run_id,
-                    category=item.get("category", "ux"),
+                    category=normalize_category(item.get("category", "ux")),
                     title=item.get("title", "Untitled finding"),
                     description=item.get("description", ""),
-                    severity=item.get("severity", "medium"),
+                    severity=normalize_severity(item.get("severity", "medium")),
                     confidence=float(item.get("confidence", 0.5)),
                     page_url=item.get("page_url") or evidence.get("finalUrl") or evidence.get("targetUrl") or "",
                     observed_behavior=item.get("observed_behavior", ""),

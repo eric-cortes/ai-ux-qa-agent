@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.0.0",
   "scripts": {
+    "dev": "./dev.sh",
     "dev:web": "pnpm --filter web dev",
     "dev:browser-worker": "pnpm --filter @ai-ux-qa/browser-worker dev",
     "build:web": "pnpm --filter web build",
