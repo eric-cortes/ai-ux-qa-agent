@@ -70,7 +70,11 @@ def fallback_findings(run_id: str, evidence: dict[str, Any]) -> list[Finding]:
                 confidence=0.9,
                 page_url=page_url,
                 observed_behavior="The browser recorded request failures.",
-                reproduction_steps=["Open the target page", "Repeat the captured flow", "Inspect the network panel for failed requests"],
+                reproduction_steps=[
+                    "Open the target page",
+                    "Repeat the captured flow",
+                    "Inspect the network panel for failed requests",
+                ],
                 evidence_ids=["evidence.json"],
             )
         )
@@ -87,7 +91,11 @@ def fallback_findings(run_id: str, evidence: dict[str, Any]) -> list[Finding]:
                 confidence=0.88,
                 page_url=page_url,
                 observed_behavior="Error responses were captured while executing the page flow.",
-                reproduction_steps=["Open the target page", "Repeat the captured flow", "Inspect network responses with error status codes"],
+                reproduction_steps=[
+                    "Open the target page",
+                    "Repeat the captured flow",
+                    "Inspect network responses with error status codes",
+                ],
                 evidence_ids=["evidence.json"],
             )
         )
@@ -106,7 +114,11 @@ def fallback_findings(run_id: str, evidence: dict[str, Any]) -> list[Finding]:
                 confidence=0.95,
                 page_url=page_url,
                 observed_behavior=first.get("help") or "Accessibility rules were violated on the page.",
-                reproduction_steps=["Open the target page", "Run the accessibility scan", "Review the reported violation and affected elements"],
+                reproduction_steps=[
+                    "Open the target page",
+                    "Run the accessibility scan",
+                    "Review the reported violation and affected elements",
+                ],
                 evidence_ids=["evidence.json", "page.png"],
             )
         )
@@ -125,7 +137,11 @@ def fallback_findings(run_id: str, evidence: dict[str, Any]) -> list[Finding]:
                 confidence=0.85,
                 page_url=page_url,
                 observed_behavior="Console error output was captured while the page was loading or interacting.",
-                reproduction_steps=["Open the target page", "Repeat the captured flow", "Inspect browser console output"],
+                reproduction_steps=[
+                    "Open the target page",
+                    "Repeat the captured flow",
+                    "Inspect browser console output",
+                ],
                 evidence_ids=["evidence.json"],
             )
         )
@@ -154,8 +170,7 @@ def generate_with_openai(run_id: str, evidence: dict[str, Any]) -> list[Finding]
                     "content": (
                         "Return an object with a 'findings' array. "
                         "Each finding must include: category, title, description, severity, confidence, "
-                        "page_url, observed_behavior, reproduction_steps, evidence_ids.\n\n"
-                        + prompt
+                        "page_url, observed_behavior, reproduction_steps, evidence_ids.\n\n" + prompt
                     ),
                 },
             ],
