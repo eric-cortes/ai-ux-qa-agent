@@ -7,7 +7,9 @@
     "dev:web": "pnpm --filter web dev",
     "dev:browser-worker": "pnpm --filter @ai-ux-qa/browser-worker dev",
     "build:web": "pnpm --filter web build",
-    "lint:web": "pnpm --filter web lint"
+    "lint:web": "pnpm --filter web lint",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "tsc -p apps/web/tsconfig.json --noEmit && tsc -p workers/browser/tsconfig.json --noEmit && tsc -p packages/shared-types/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "eslint": "^9.35.0",
