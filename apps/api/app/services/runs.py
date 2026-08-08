@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import os
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from threading import Lock, Thread
 from uuid import uuid4
 
+from app.core.paths import ARTIFACT_ROOT, PROJECT_ROOT
 from app.schemas.run import CreateRunRequest, RunResponse
 
 
@@ -28,7 +28,8 @@ class RunRecord:
 
 _RUNS: list[RunRecord] = []
 _LOCK = Lock()
-_ROOT_DIR = Path(__file__).resolve().parents[4]
+_BROWSER_WORKER_TIMEOUT_SECONDS = int(os.getenv("BROWSER_WORKER_TIMEOUT_SECONDS", "180"))
+_AI_WORKER_TIMEOUT_SECONDS = int(os.getenv("AI_WORKER_TIMEOUT_SECONDS", "120"))
 
 
 def _to_response(run: RunRecord) -> RunResponse:
@@ -86,15 +87,14 @@ def _execute_run(run_id: str) -> None:
         run.status = "running"
         run.updated_at = datetime.now(UTC)
 
-    artifact_root = _ROOT_DIR / "storage" / "artifacts"
-    artifact_root.mkdir(parents=True, exist_ok=True)
+    ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
     env.update(
         {
             "RUN_ID": run_id,
             "TARGET_URL": run.target_url,
-            "ARTIFACT_LOCAL_DIR": str(artifact_root),
+            "ARTIFACT_LOCAL_DIR": str(ARTIFACT_ROOT),
         }
     )
 
@@ -103,19 +103,23 @@ def _execute_run(run_id: str) -> None:
     if run.login_password:
         env["TARGET_APP_LOGIN_PASSWORD"] = run.login_password
 
+    with _LOCK:
+        run.login_password = None
+
     try:
         completed = subprocess.run(
             ["pnpm", "--filter", "@ai-ux-qa/browser-worker", "dev"],
-            cwd=_ROOT_DIR,
+            cwd=PROJECT_ROOT,
             env=env,
             capture_output=True,
             text=True,
             check=False,
+            timeout=_BROWSER_WORKER_TIMEOUT_SECONDS,
         )
 
         with _LOCK:
             run.updated_at = datetime.now(UTC)
-            run.artifact_dir = str(artifact_root / run_id)
+            run.artifact_dir = str(ARTIFACT_ROOT / run_id)
             if completed.returncode == 0:
                 run.status = "analyzing"
                 run.error_message = None
@@ -128,11 +132,12 @@ def _execute_run(run_id: str) -> None:
 
         ai_completed = subprocess.run(
             ["python3", "workers/ai/app/main.py"],
-            cwd=_ROOT_DIR,
+            cwd=PROJECT_ROOT,
             env=env,
             capture_output=True,
             text=True,
             check=False,
+            timeout=_AI_WORKER_TIMEOUT_SECONDS,
         )
 
         with _LOCK:
@@ -143,6 +148,11 @@ def _execute_run(run_id: str) -> None:
             else:
                 run.status = "failed"
                 run.error_message = (ai_completed.stderr or ai_completed.stdout).strip()[-2000:] or "AI worker failed"
+    except subprocess.TimeoutExpired as exc:
+        with _LOCK:
+            run.status = "failed"
+            run.updated_at = datetime.now(UTC)
+            run.error_message = f"Run timed out after {exc.timeout} seconds"
     except Exception as exc:
         with _LOCK:
             run.status = "failed"

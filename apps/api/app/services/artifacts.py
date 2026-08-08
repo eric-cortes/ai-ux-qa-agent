@@ -4,9 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-
-ROOT_DIR = Path(__file__).resolve().parents[4]
-ARTIFACT_ROOT = ROOT_DIR / "storage" / "artifacts"
+from app.core.paths import ARTIFACT_ROOT
 
 
 def get_run_dir(run_id: str) -> Path:
