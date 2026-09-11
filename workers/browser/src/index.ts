@@ -101,6 +101,12 @@ async function executeRun({
     }
 
     await page.screenshot({ path: path.join(runDir, "page.png"), fullPage: true });
+    const guidelineChecks = await collectGuidelineChecks(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: path.join(runDir, "mobile.png"), fullPage: true });
+    guidelineChecks.viewport = await collectViewportEvidence(page);
+    await page.setViewportSize({ width: 1440, height: 960 });
 
     const accessibility = await new AxeBuilder({ page }).analyze();
     const title = await page.title();
@@ -132,7 +138,8 @@ async function executeRun({
           failedRequests,
           errorResponses: responses,
           interactiveElements,
-          axeViolations: accessibility.violations
+          axeViolations: accessibility.violations,
+          guidelineChecks
         },
         null,
         2,
@@ -146,6 +153,57 @@ async function executeRun({
   }
 }
 
+
+type GuidelineChecks = {
+  unlabeledFormControls: Array<{ tag: string; type: string | null; name: string | null }>;
+  smallTargets: Array<{ tag: string; text: string; width: number; height: number }>;
+  keyboard: { sampledTabStops: string[]; focusLostToDocument: boolean };
+  viewport?: { width: number; scrollWidth: number; hasHorizontalOverflow: boolean };
+};
+
+async function collectGuidelineChecks(page: Page): Promise<GuidelineChecks> {
+  const structuralChecks = await page.evaluate(() => {
+    const isVisible = (element: Element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+    };
+    const unlabeledFormControls = Array.from(document.querySelectorAll("input, select, textarea"))
+      .filter((element) => {
+        const input = element as HTMLInputElement;
+        return isVisible(element) && !["hidden", "submit", "button", "reset", "image"].includes(input.type) &&
+          !input.labels?.length && !element.getAttribute("aria-label") && !element.getAttribute("aria-labelledby");
+      })
+      .slice(0, 30)
+      .map((element) => ({ tag: element.tagName.toLowerCase(), type: element.getAttribute("type"), name: element.getAttribute("name") }));
+    const smallTargets = Array.from(document.querySelectorAll("a, button, input, select, textarea, [role='button'], [role='link']"))
+      .filter(isVisible)
+      .map((element) => ({ element, rect: element.getBoundingClientRect(), display: window.getComputedStyle(element).display }))
+      .filter(({ element, rect, display }) => !(element.tagName === "A" && display === "inline") && (rect.width < 24 || rect.height < 24))
+      .slice(0, 30)
+      .map(({ element, rect }) => ({ tag: element.tagName.toLowerCase(), text: (element.textContent ?? "").trim().slice(0, 120), width: Math.round(rect.width), height: Math.round(rect.height) }));
+    return { unlabeledFormControls, smallTargets };
+  });
+
+  const sampledTabStops: string[] = [];
+  for (let index = 0; index < 8; index += 1) {
+    await page.keyboard.press("Tab");
+    sampledTabStops.push(await page.evaluate(() => {
+      const element = document.activeElement as HTMLElement | null;
+      return element ? `${element.tagName.toLowerCase()}#${element.id}.${element.getAttribute("role") ?? ""}` : "none";
+    }));
+  }
+  const focusLostToDocument = sampledTabStops.includes("body#.");
+  return { ...structuralChecks, keyboard: { sampledTabStops, focusLostToDocument } };
+}
+
+async function collectViewportEvidence(page: Page) {
+  return page.evaluate(() => ({
+    width: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    hasHorizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1
+  }));
+}
 
 async function tryLogin(page: Page, email: string, password: string, actions: string[]) {
   const emailLocator = await firstVisible(page, [
