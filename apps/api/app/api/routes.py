@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from app.schemas.finding import FindingResponse
 from app.schemas.run import CreateRunRequest, RunResponse
 from app.services.artifacts import read_json_artifact
-from app.services.runs import create_run, get_run, list_runs
+from app.services.runs import clear_runs, create_run, get_run, list_runs
 
 router = APIRouter()
 
@@ -16,6 +16,11 @@ def health() -> dict[str, str]:
 @router.get("/runs", response_model=list[RunResponse])
 def get_runs() -> list[RunResponse]:
     return list_runs()
+
+
+@router.delete("/runs", status_code=204)
+def delete_runs() -> None:
+    clear_runs()
 
 
 @router.get("/runs/{run_id}", response_model=RunResponse)

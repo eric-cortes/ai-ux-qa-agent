@@ -59,7 +59,7 @@ type FormState = {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
 const appApiOrigin = apiBaseUrl.replace(/\/api\/?$/, "");
-const initialForm: FormState = { projectId: "project_local", environmentId: "local_preview", targetUrl: "https://example.com", loginEmail: "", loginPassword: "" };
+const initialForm: FormState = { projectId: "", environmentId: "", targetUrl: "", loginEmail: "", loginPassword: "" };
 const panelClassName = "h-full rounded-2xl border border-border bg-panel p-5";
 const fieldClassName = "w-full rounded-[10px] border border-border bg-surface px-3.5 py-3 text-ink outline-none placeholder:text-muted focus:border-lime-spark focus:ring-2 focus:ring-lime-spark/30";
 
@@ -72,6 +72,7 @@ export default function HomePage() {
   const [evidence, setEvidence] = useState<Evidence | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function loadRuns() {
@@ -146,6 +147,26 @@ export default function HomePage() {
     }
   }
 
+  async function handleClearAll() {
+    if (!window.confirm("Delete all runs and saved artifacts? This cannot be undone.")) return;
+    setIsClearing(true);
+    setError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/runs`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to clear runs");
+      setForm(initialForm);
+      setRuns([]);
+      setSelectedRunId(null);
+      setSelectedRun(null);
+      setFindings([]);
+      setEvidence(null);
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : "Failed to clear runs");
+    } finally {
+      setIsClearing(false);
+    }
+  }
+
   const selectedSummary = useMemo(() => selectedRun ?? runs.find((run) => run.id === selectedRunId) ?? null, [runs, selectedRun, selectedRunId]);
   const screenshotUrl = selectedSummary ? `${appApiOrigin}/artifacts/${selectedSummary.id}/page.png` : null;
 
@@ -166,10 +187,13 @@ export default function HomePage() {
             <form onSubmit={handleSubmit} className="grid gap-3">
               <input className={fieldClassName} value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })} placeholder="Project ID" />
               <input className={fieldClassName} value={form.environmentId} onChange={(event) => setForm({ ...form, environmentId: event.target.value })} placeholder="Environment ID" />
-              <input className={fieldClassName} value={form.targetUrl} onChange={(event) => setForm({ ...form, targetUrl: event.target.value })} placeholder="Target URL" />
+              <input className={fieldClassName} value={form.targetUrl} onChange={(event) => setForm({ ...form, targetUrl: event.target.value })} placeholder="https://example.com" />
               <input className={fieldClassName} value={form.loginEmail} onChange={(event) => setForm({ ...form, loginEmail: event.target.value })} placeholder="Login email (optional)" />
               <input className={fieldClassName} value={form.loginPassword} onChange={(event) => setForm({ ...form, loginPassword: event.target.value })} placeholder="Login password (optional)" type="password" />
-              <button className="cursor-pointer rounded-[10px] bg-lime-spark px-3.5 py-3 font-bold text-graphite transition hover:bg-lime-spark/90 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={isSubmitting}>{isSubmitting ? "Queueing..." : "Queue run"}</button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button className="cursor-pointer rounded-[10px] bg-lime-spark px-3.5 py-3 font-bold text-graphite transition hover:bg-lime-spark/90 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={isSubmitting || isClearing}>{isSubmitting ? "Queueing..." : "Queue run"}</button>
+                <button className="cursor-pointer rounded-[10px] border border-lime-spark bg-surface px-3.5 py-3 font-semibold text-ink transition hover:text-lime-spark disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => void handleClearAll()} disabled={isSubmitting || isClearing}>{isClearing ? "Clearing..." : "Clear all"}</button>
+              </div>
             </form>
           </section>
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -58,6 +59,12 @@ def get_run(run_id: str) -> RunResponse | None:
             if run.id == run_id:
                 return _to_response(run)
     return None
+
+
+def clear_runs() -> None:
+    with _LOCK:
+        _RUNS.clear()
+    shutil.rmtree(ARTIFACT_ROOT, ignore_errors=True)
 
 
 def create_run(payload: CreateRunRequest) -> RunResponse:

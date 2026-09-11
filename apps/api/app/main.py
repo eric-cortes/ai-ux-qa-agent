@@ -17,4 +17,5 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/artifacts", StaticFiles(directory=str(ARTIFACT_ROOT)), name="artifacts")
