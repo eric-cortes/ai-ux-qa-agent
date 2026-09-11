@@ -60,7 +60,7 @@ type FormState = {
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
 const appApiOrigin = apiBaseUrl.replace(/\/api\/?$/, "");
 const initialForm: FormState = { projectId: "project_local", environmentId: "local_preview", targetUrl: "https://example.com", loginEmail: "", loginPassword: "" };
-const panelClassName = "rounded-2xl border border-border bg-panel p-5";
+const panelClassName = "h-full rounded-2xl border border-border bg-panel p-5";
 const fieldClassName = "w-full rounded-[10px] border border-border bg-surface px-3.5 py-3 text-ink outline-none placeholder:text-muted focus:border-lime-spark focus:ring-2 focus:ring-lime-spark/30";
 
 export default function HomePage() {
@@ -160,7 +160,7 @@ export default function HomePage() {
 
         {error ? <div className="rounded-2xl border border-red-800 bg-red-950/30 p-5 text-red-100"><strong>Error:</strong> {error}</div> : null}
 
-        <div className="grid items-start gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
           <section className={panelClassName}>
             <h2 className="mt-0 text-lg font-semibold">Create run</h2>
             <form onSubmit={handleSubmit} className="grid gap-3">
@@ -181,7 +181,7 @@ export default function HomePage() {
           </section>
         </div>
 
-        <div className="grid items-start gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
           <section className={panelClassName}>
             <div className="mb-3 flex items-center justify-between"><h2 className="m-0 text-lg font-semibold">Runs</h2><button type="button" className="cursor-pointer rounded-[10px] border border-border bg-surface px-3 py-2.5 text-ink transition hover:border-lime-spark" onClick={() => void loadRuns()}>Refresh</button></div>
             {isLoadingRuns ? <p className="text-muted">Loading runs...</p> : null}
@@ -206,7 +206,7 @@ export default function HomePage() {
           </section>
         </div>
 
-        <div className="grid items-start gap-4 lg:grid-cols-2">
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
           <section className={panelClassName}>
             <h2 className="mt-0 text-lg font-semibold">Findings</h2>
             <div className="grid gap-3">
