@@ -20,6 +20,7 @@ async function main() {
   const gotoTimeoutMs = parseInt(process.env.BROWSER_GOTO_TIMEOUT_MS ?? `${DEFAULT_GOTO_TIMEOUT_MS}`, 10);
   const maxRuntimeMs = parseInt(process.env.BROWSER_MAX_RUNTIME_MS ?? `${DEFAULT_MAX_RUNTIME_MS}`, 10);
   const allowedDomains = parseAllowedDomains(process.env.TARGET_URL_ALLOWED_DOMAINS);
+  const allowLocalTargets = process.env.ALLOW_LOCAL_TARGETS === "true";
   const runDir = path.join(artifactDir, runId);
 
   const timeoutHandle = setTimeout(() => {
@@ -35,7 +36,8 @@ async function main() {
       loginEmail,
       loginPassword,
       gotoTimeoutMs,
-      allowedDomains
+      allowedDomains,
+      allowLocalTargets
     });
   } finally {
     clearTimeout(timeoutHandle);
@@ -49,7 +51,8 @@ async function executeRun({
   loginEmail,
   loginPassword,
   gotoTimeoutMs,
-  allowedDomains
+  allowedDomains,
+  allowLocalTargets
 }: {
   runId: string;
   targetUrl: string;
@@ -58,9 +61,10 @@ async function executeRun({
   loginPassword?: string;
   gotoTimeoutMs: number;
   allowedDomains: string[];
+  allowLocalTargets: boolean;
 }) {
   await mkdir(runDir, { recursive: true });
-  await assertSafeTarget(targetUrl, allowedDomains);
+  await assertSafeTarget(targetUrl, allowedDomains, allowLocalTargets);
 
   let browser: Browser | null = null;
   let page: Page | null = null;

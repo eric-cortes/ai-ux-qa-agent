@@ -16,6 +16,10 @@ export function isBlockedHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname.endsWith(".localhost");
 }
 
+export function isLocalAddress(address: string): boolean {
+  return (net.isIPv4(address) && address.startsWith("127.")) || address === "::1";
+}
+
 export function isBlockedAddress(address: string): boolean {
   if (net.isIPv4(address)) {
     const [a, b, c, d] = address.split(".").map(Number);
@@ -51,6 +55,7 @@ export async function resolveHostname(hostname: string): Promise<string[]> {
 export async function assertSafeTarget(
   targetUrl: string,
   allowedDomains: string[],
+  allowLocalTargets = false,
 ): Promise<void> {
   const url = new URL(targetUrl);
   if (!["http:", "https:"].includes(url.protocol)) {
@@ -58,20 +63,22 @@ export async function assertSafeTarget(
   }
 
   const hostname = url.hostname.toLowerCase();
-  if (isBlockedHostname(hostname)) {
+  const isLocalHostname = isBlockedHostname(hostname);
+  if (isLocalHostname && !allowLocalTargets) {
     throw new Error(`Blocked target hostname: ${hostname}`);
   }
 
   if (
     allowedDomains.length > 0 &&
-    !allowedDomains.some((domain) => matchesAllowedDomain(hostname, domain))
+    !allowedDomains.some((domain) => matchesAllowedDomain(hostname, domain)) &&
+    !(allowLocalTargets && isLocalHostname)
   ) {
     throw new Error(`Target hostname is not in TARGET_URL_ALLOWED_DOMAINS: ${hostname}`);
   }
 
   const addresses = await resolveHostname(hostname);
   for (const address of addresses) {
-    if (isBlockedAddress(address)) {
+    if (isBlockedAddress(address) && !(allowLocalTargets && isLocalAddress(address))) {
       throw new Error(`Blocked target address resolved for ${hostname}: ${address}`);
     }
   }
