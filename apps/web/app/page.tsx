@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
+import { Button } from "../components/ui/Button";
+import { Modal } from "../components/ui/Modal";
+
 type RunStatus = "queued" | "running" | "analyzing" | "completed" | "failed" | "cancelled";
 type FindingSeverity = "low" | "medium" | "high" | "critical";
 
@@ -73,6 +76,7 @@ export default function HomePage() {
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [isFindingsModalOpen, setIsFindingsModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function loadRuns() {
@@ -171,12 +175,12 @@ export default function HomePage() {
   const screenshotUrl = selectedSummary ? `${appApiOrigin}/artifacts/${selectedSummary.id}/page.png` : null;
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1360px] p-5 sm:p-8">
+    <main className="mx-auto min-h-screen max-w-340 p-5 sm:p-8">
       <section className="grid gap-4">
         <div>
           <p className="mb-2 text-muted">Product A · Local MVP</p>
           <h1 className="m-0 text-2xl font-bold tracking-tight">AI UX QA Agent</h1>
-          <p className="max-w-[780px] text-secondary">Queue local QA runs, collect screenshot and browser evidence, generate findings, and review results in one dashboard.</p>
+          <p className="max-w-195 text-secondary">Queue local QA runs, collect screenshot and browser evidence, generate findings, and review results in one dashboard.</p>
         </div>
 
         {error ? <div className="rounded-2xl border border-red-800 bg-red-950/30 p-5 text-red-100"><strong>Error:</strong> {error}</div> : null}
@@ -191,30 +195,33 @@ export default function HomePage() {
               <input className={fieldClassName} value={form.loginEmail} onChange={(event) => setForm({ ...form, loginEmail: event.target.value })} placeholder="Login email (optional)" />
               <input className={fieldClassName} value={form.loginPassword} onChange={(event) => setForm({ ...form, loginPassword: event.target.value })} placeholder="Login password (optional)" type="password" />
               <div className="grid gap-3 sm:grid-cols-2">
-                <button className="cursor-pointer rounded-[10px] bg-lime-spark px-3.5 py-3 font-bold text-graphite transition hover:bg-lime-spark/90 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={isSubmitting || isClearing}>{isSubmitting ? "Queueing..." : "Queue run"}</button>
-                <button className="cursor-pointer rounded-[10px] border border-lime-spark bg-surface px-3.5 py-3 font-semibold text-ink transition hover:text-lime-spark disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => void handleClearAll()} disabled={isSubmitting || isClearing}>{isClearing ? "Clearing..." : "Clear all"}</button>
+                <Button type="submit" className="font-bold" disabled={isSubmitting || isClearing}>{isSubmitting ? "Queueing..." : "Queue run"}</Button>
+                <Button variant="outline" type="button" onClick={() => void handleClearAll()} disabled={isSubmitting || isClearing}>{isClearing ? "Clearing..." : "Clear all"}</Button>
               </div>
             </form>
           </section>
 
-          <section className={panelClassName}>
+          <section className={`${panelClassName} flex flex-col`}>
             <h2 className="mt-0 text-lg font-semibold">Execution pipeline</h2>
-            <ul className="m-0 grid list-disc gap-2 pl-[18px] text-secondary">
+            <ul className="m-0 grid list-disc gap-2 pl-4.5 text-secondary">
               <li>Queue run</li><li>Launch Playwright browser worker</li><li>Attempt login with email/password when provided</li><li>Capture screenshot, console, network, and accessibility evidence</li><li>Run AI analysis and write findings</li>
             </ul>
+            <Button type="button" onClick={() => setIsFindingsModalOpen(true)} disabled={!selectedRunId} className="mt-auto self-start font-bold">
+              Open findings{findings.length > 0 ? ` (${findings.length})` : ""}
+            </Button>
           </section>
         </div>
 
         <div className="grid items-stretch gap-4 lg:grid-cols-2">
           <section className={panelClassName}>
-            <div className="mb-3 flex items-center justify-between"><h2 className="m-0 text-lg font-semibold">Runs</h2><button type="button" className="cursor-pointer rounded-[10px] border border-border bg-surface px-3 py-2.5 text-ink transition hover:border-lime-spark" onClick={() => void loadRuns()}>Refresh</button></div>
+            <div className="mb-3 flex items-center justify-between"><h2 className="m-0 text-lg font-semibold">Runs</h2><Button variant="secondary" size="sm" type="button" onClick={() => void loadRuns()}>Refresh</Button></div>
             {isLoadingRuns ? <p className="text-muted">Loading runs...</p> : null}
             <div className="grid gap-3">
               {runs.map((run) => (
-                <button key={run.id} type="button" onClick={() => setSelectedRunId(run.id)} className={`cursor-pointer rounded-xl border bg-surface p-4 text-left text-ink transition hover:border-lime-spark ${selectedRunId === run.id ? "border-lime-spark" : "border-border"}`}>
+                <Button key={run.id} variant="ghost" type="button" onClick={() => setSelectedRunId(run.id)} className={`block w-full rounded-xl border bg-surface p-4 text-left ${selectedRunId === run.id ? "border-lime-spark" : "border-border"}`}>
                   <div className="flex gap-3 justify-between"><strong>{run.id}</strong><StatusBadge status={run.status} /></div>
                   <div className="mt-1.5 text-muted">{run.target_url}</div><div className="mt-2.5 text-xs text-secondary">Project: {run.project_id}</div>
-                </button>
+                </Button>
               ))}
               {!isLoadingRuns && runs.length === 0 ? <p className="text-muted">No runs yet.</p> : null}
             </div>
@@ -231,21 +238,7 @@ export default function HomePage() {
         </div>
 
         <div className="grid items-stretch gap-4 lg:grid-cols-2">
-          <section className={panelClassName}>
-            <h2 className="mt-0 text-lg font-semibold">Findings</h2>
-            <div className="grid gap-3">
-              {findings.map((finding) => <article key={finding.id} className="grid gap-2.5 rounded-xl border border-border bg-surface p-4">
-                <div className="flex items-center justify-between gap-3"><strong>{finding.title}</strong><SeverityBadge severity={finding.severity} /></div>
-                <div className="mt-1.5 text-muted">{finding.category} · confidence {Math.round(finding.confidence * 100)}% · {finding.verification_status.replaceAll("_", " ")}</div>
-                {finding.guideline_id ? <div className="text-secondary"><strong>Guideline:</strong> {finding.guideline_source_url ? <a href={finding.guideline_source_url} target="_blank" rel="noreferrer" className="text-lime-spark underline underline-offset-2">{finding.guideline_id}</a> : finding.guideline_id}</div> : null}
-                <p className="mb-0 text-ink">{finding.description}</p><div className="text-secondary"><strong>Observed:</strong> {finding.observed_behavior}</div>
-                <div><strong>Steps</strong><ol className="mt-2 grid list-decimal gap-1.5 pl-5 text-secondary">{finding.reproduction_steps.map((step, index) => <li key={`${finding.id}-${index}`}>{step}</li>)}</ol></div>
-              </article>)}
-              {selectedRunId && findings.length === 0 ? <p className="text-muted">No findings yet or analysis still running.</p> : null}
-            </div>
-          </section>
-
-          <section className={panelClassName}>
+          <section className={`${panelClassName} lg:col-span-2`}>
             <h2 className="mt-0 text-lg font-semibold">Evidence summary</h2>
             {evidence ? <div className="grid gap-3">
               <div><strong>Title:</strong> {evidence.title ?? "-"}</div><div><strong>Final URL:</strong> {evidence.finalUrl ?? evidence.targetUrl ?? "-"}</div>
@@ -259,12 +252,24 @@ export default function HomePage() {
           </section>
         </div>
       </section>
+      <Modal open={isFindingsModalOpen} onClose={() => setIsFindingsModalOpen(false)} title={`Findings (${findings.length})`} className="max-w-4xl">
+        <div className="grid gap-3">
+          {findings.map((finding) => <article key={finding.id} className="grid gap-2.5 rounded-xl border border-border bg-surface p-4">
+            <div className="flex items-center justify-between gap-3"><strong>{finding.title}</strong><SeverityBadge severity={finding.severity} /></div>
+            <div className="mt-1.5 text-muted">{finding.category} · confidence {Math.round(finding.confidence * 100)}% · {finding.verification_status.replaceAll("_", " ")}</div>
+            {finding.guideline_id ? <div className="text-secondary"><strong>Guideline:</strong> {finding.guideline_source_url ? <a href={finding.guideline_source_url} target="_blank" rel="noreferrer" className="text-lime-spark underline underline-offset-2">{finding.guideline_id}</a> : finding.guideline_id}</div> : null}
+            <p className="mb-0 text-ink">{finding.description}</p><div className="text-secondary"><strong>Observed:</strong> {finding.observed_behavior}</div>
+            <div><strong>Steps</strong><ol className="mt-2 grid list-decimal gap-1.5 pl-5 text-secondary">{finding.reproduction_steps.map((step, index) => <li key={`${finding.id}-${index}`}>{step}</li>)}</ol></div>
+          </article>)}
+          {selectedRunId && findings.length === 0 ? <p className="text-muted">No findings yet or analysis is still running.</p> : null}
+        </div>
+      </Modal>
     </main>
   );
 }
 
 function EvidenceList({ title, items }: { title: string; items: string[] }) {
-  return <div><strong>{title}</strong><ul className="mt-2 grid list-disc gap-1.5 pl-[18px] text-secondary">{items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>;
+  return <div><strong>{title}</strong><ul className="mt-2 grid list-disc gap-1.5 pl-4.5 text-secondary">{items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>;
 }
 
 function StatusBadge({ status }: { status: RunStatus }) {
