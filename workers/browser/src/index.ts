@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
-import { chromium, type Browser, type Locator, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 
 import { assertSafeTarget, parseAllowedDomains } from "./ssrf";
 
@@ -67,11 +67,13 @@ async function executeRun({
   await assertSafeTarget(targetUrl, allowedDomains, allowLocalTargets);
 
   let browser: Browser | null = null;
+  let context: BrowserContext | null = null;
   let page: Page | null = null;
 
   try {
     browser = await chromium.launch();
-    page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
+    context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+    page = await context.newPage();
 
     const consoleMessages: string[] = [];
     const failedRequests: string[] = [];
@@ -153,6 +155,7 @@ async function executeRun({
     console.log(`Saved evidence to ${runDir}`);
   } finally {
     await page?.close().catch(() => undefined);
+    await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
   }
 }
@@ -167,21 +170,23 @@ type GuidelineChecks = {
 
 async function collectGuidelineChecks(page: Page): Promise<GuidelineChecks> {
   const structuralChecks = await page.evaluate(() => {
-    const isVisible = (element: Element) => {
-      const style = window.getComputedStyle(element);
-      const rect = element.getBoundingClientRect();
-      return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
-    };
     const unlabeledFormControls = Array.from(document.querySelectorAll("input, select, textarea"))
       .filter((element) => {
         const input = element as HTMLInputElement;
-        return isVisible(element) && !["hidden", "submit", "button", "reset", "image"].includes(input.type) &&
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        const isVisible = style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+        return isVisible && !["hidden", "submit", "button", "reset", "image"].includes(input.type) &&
           !input.labels?.length && !element.getAttribute("aria-label") && !element.getAttribute("aria-labelledby");
       })
       .slice(0, 30)
       .map((element) => ({ tag: element.tagName.toLowerCase(), type: element.getAttribute("type"), name: element.getAttribute("name") }));
     const smallTargets = Array.from(document.querySelectorAll("a, button, input, select, textarea, [role='button'], [role='link']"))
-      .filter(isVisible)
+      .filter((element) => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+      })
       .map((element) => ({ element, rect: element.getBoundingClientRect(), display: window.getComputedStyle(element).display }))
       .filter(({ element, rect, display }) => !(element.tagName === "A" && display === "inline") && (rect.width < 24 || rect.height < 24))
       .slice(0, 30)

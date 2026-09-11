@@ -80,7 +80,14 @@ export default function HomePage() {
       if (!response.ok) throw new Error("Failed to load runs");
       const data: Run[] = await response.json();
       setRuns(data);
-      if (!selectedRunId && data.length > 0) setSelectedRunId(data[0].id);
+      if (!selectedRunId && data.length > 0) {
+        setSelectedRunId(data[0].id);
+      } else if (selectedRunId && !data.some((run) => run.id === selectedRunId)) {
+        setSelectedRunId(null);
+        setSelectedRun(null);
+        setFindings([]);
+        setEvidence(null);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load runs");
     } finally {

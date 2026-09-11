@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock, Thread
@@ -131,7 +132,7 @@ def _execute_run(run_id: str) -> None:
             return
 
         ai_completed = subprocess.run(
-            ["python3", "workers/ai/app/main.py"],
+            [sys.executable, "workers/ai/app/main.py"],
             cwd=PROJECT_ROOT,
             env=env,
             capture_output=True,
