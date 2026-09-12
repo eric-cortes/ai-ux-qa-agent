@@ -252,7 +252,7 @@ export default function HomePage() {
           </section>
         </div>
       </section>
-      <Modal open={isFindingsModalOpen} onClose={() => setIsFindingsModalOpen(false)} title={`Findings (${findings.length})`} className="max-w-4xl">
+      <Modal open={isFindingsModalOpen} onClose={() => setIsFindingsModalOpen(false)} title={`Findings (${findings.length})`} className="max-w-screen-2xl">
         <div className="grid gap-3">
           {findings.map((finding) => <article key={finding.id} className="grid gap-2.5 rounded-xl border border-border bg-surface p-4">
             <div className="flex items-center justify-between gap-3"><strong>{finding.title}</strong><SeverityBadge severity={finding.severity} /></div>
