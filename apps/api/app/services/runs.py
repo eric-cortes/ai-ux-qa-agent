@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock, Thread
@@ -57,6 +59,12 @@ def get_run(run_id: str) -> RunResponse | None:
             if run.id == run_id:
                 return _to_response(run)
     return None
+
+
+def clear_runs() -> None:
+    with _LOCK:
+        _RUNS.clear()
+    shutil.rmtree(ARTIFACT_ROOT, ignore_errors=True)
 
 
 def create_run(payload: CreateRunRequest) -> RunResponse:
@@ -131,7 +139,7 @@ def _execute_run(run_id: str) -> None:
             return
 
         ai_completed = subprocess.run(
-            ["python3", "workers/ai/app/main.py"],
+            [sys.executable, "workers/ai/app/main.py"],
             cwd=PROJECT_ROOT,
             env=env,
             capture_output=True,

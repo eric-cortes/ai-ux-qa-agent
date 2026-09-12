@@ -15,4 +15,7 @@ class FindingResponse(BaseModel):
     observed_behavior: str
     reproduction_steps: list[str]
     evidence_ids: list[str] = []
+    guideline_id: str | None = None
+    guideline_source_url: str | None = None
+    verification_status: Literal["confirmed", "likely", "needs_human_review"] = "needs_human_review"
     status: Literal["open", "accepted", "rejected", "fixed"] = "open"

@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties, FormEvent } from "react";
+import type { FormEvent } from "react";
+
+import { Button } from "../components/ui/Button";
+import { Modal } from "../components/ui/Modal";
 
 type RunStatus = "queued" | "running" | "analyzing" | "completed" | "failed" | "cancelled";
 type FindingSeverity = "low" | "medium" | "high" | "critical";
@@ -30,6 +33,9 @@ type Finding = {
   observed_behavior: string;
   reproduction_steps: string[];
   evidence_ids: string[];
+  guideline_id?: string | null;
+  guideline_source_url?: string | null;
+  verification_status: "confirmed" | "likely" | "needs_human_review";
   status: "open" | "accepted" | "rejected" | "fixed";
 };
 
@@ -43,6 +49,7 @@ type Evidence = {
   errorResponses?: Array<{ url: string; status: number; method: string }>;
   interactiveElements?: Array<{ tag: string; text?: string; ariaLabel?: string | null; name?: string | null; type?: string | null }>;
   axeViolations?: Array<{ id: string; impact?: string | null; description?: string; help?: string }>;
+  guidelineChecks?: { unlabeledFormControls?: unknown[]; smallTargets?: unknown[]; viewport?: { hasHorizontalOverflow?: boolean }; keyboard?: { sampledTabStops?: string[] } };
 };
 
 type FormState = {
@@ -55,13 +62,9 @@ type FormState = {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
 const appApiOrigin = apiBaseUrl.replace(/\/api\/?$/, "");
-const initialForm: FormState = {
-  projectId: "project_local",
-  environmentId: "local_preview",
-  targetUrl: "https://example.com",
-  loginEmail: "",
-  loginPassword: ""
-};
+const initialForm: FormState = { projectId: "", environmentId: "", targetUrl: "", loginEmail: "", loginPassword: "" };
+const panelClassName = "h-full rounded-2xl border border-border bg-panel p-5";
+const fieldClassName = "w-full rounded-[10px] border border-border bg-surface px-3.5 py-3 text-ink outline-none placeholder:text-muted focus:border-lime-spark focus:ring-2 focus:ring-lime-spark/30";
 
 export default function HomePage() {
   const [form, setForm] = useState<FormState>(initialForm);
@@ -72,6 +75,8 @@ export default function HomePage() {
   const [evidence, setEvidence] = useState<Evidence | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [isFindingsModalOpen, setIsFindingsModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function loadRuns() {
@@ -80,7 +85,14 @@ export default function HomePage() {
       if (!response.ok) throw new Error("Failed to load runs");
       const data: Run[] = await response.json();
       setRuns(data);
-      if (!selectedRunId && data.length > 0) setSelectedRunId(data[0].id);
+      if (!selectedRunId && data.length > 0) {
+        setSelectedRunId(data[0].id);
+      } else if (selectedRunId && !data.some((run) => run.id === selectedRunId)) {
+        setSelectedRunId(null);
+        setSelectedRun(null);
+        setFindings([]);
+        setEvidence(null);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load runs");
     } finally {
@@ -95,7 +107,6 @@ export default function HomePage() {
         fetch(`${apiBaseUrl}/runs/${runId}/findings`, { cache: "no-store" }),
         fetch(`${apiBaseUrl}/runs/${runId}/evidence`, { cache: "no-store" })
       ]);
-
       if (runResponse.ok) setSelectedRun((await runResponse.json()) as Run);
       if (findingsResponse.ok) setFindings((await findingsResponse.json()) as Finding[]);
       else setFindings([]);
@@ -106,17 +117,11 @@ export default function HomePage() {
     }
   }
 
-  useEffect(() => {
-    void loadRuns();
-  }, []);
-
+  useEffect(() => { void loadRuns(); }, []);
   useEffect(() => {
     if (!selectedRunId) return;
     void loadRunBundle(selectedRunId);
-    const interval = window.setInterval(() => {
-      void loadRuns();
-      void loadRunBundle(selectedRunId);
-    }, 4000);
+    const interval = window.setInterval(() => { void loadRuns(); void loadRunBundle(selectedRunId); }, 4000);
     return () => window.clearInterval(interval);
   }, [selectedRunId]);
 
@@ -124,22 +129,13 @@ export default function HomePage() {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
-
     try {
       const response = await fetch(`${apiBaseUrl}/runs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_id: form.projectId,
-          environment_id: form.environmentId || undefined,
-          target_url: form.targetUrl,
-          login_email: form.loginEmail || undefined,
-          login_password: form.loginPassword || undefined
-        })
+        body: JSON.stringify({ project_id: form.projectId, environment_id: form.environmentId || undefined, target_url: form.targetUrl, login_email: form.loginEmail || undefined, login_password: form.loginPassword || undefined })
       });
-
       if (!response.ok) throw new Error((await response.text()) || "Failed to queue run");
-
       const run: Run = await response.json();
       setSelectedRunId(run.id);
       setSelectedRun(run);
@@ -155,194 +151,140 @@ export default function HomePage() {
     }
   }
 
+  async function handleClearAll() {
+    if (!window.confirm("Delete all runs and saved artifacts? This cannot be undone.")) return;
+    setIsClearing(true);
+    setError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/runs`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to clear runs");
+      setForm(initialForm);
+      setRuns([]);
+      setSelectedRunId(null);
+      setSelectedRun(null);
+      setFindings([]);
+      setEvidence(null);
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : "Failed to clear runs");
+    } finally {
+      setIsClearing(false);
+    }
+  }
+
   const selectedSummary = useMemo(() => selectedRun ?? runs.find((run) => run.id === selectedRunId) ?? null, [runs, selectedRun, selectedRunId]);
   const screenshotUrl = selectedSummary ? `${appApiOrigin}/artifacts/${selectedSummary.id}/page.png` : null;
 
   return (
-    <main style={{ padding: 32, maxWidth: 1360, margin: "0 auto" }}>
-      <section style={{ display: "grid", gap: 16 }}>
+    <main className="mx-auto min-h-screen max-w-340 p-5 sm:p-8">
+      <section className="grid gap-4">
         <div>
-          <p style={{ color: "#8aa0c8", marginBottom: 8 }}>Product A · Local MVP</p>
-          <h1 style={{ margin: 0 }}>AI UX QA Agent</h1>
-          <p style={{ color: "#c9d3e7", maxWidth: 780 }}>
-            Queue local QA runs, collect screenshot and browser evidence, generate findings, and review results in one dashboard.
-          </p>
+          <p className="mb-2 text-muted">Product A · Local MVP</p>
+          <h1 className="m-0 text-2xl font-bold tracking-tight">AI UX QA Agent</h1>
+          <p className="max-w-195 text-secondary">Queue local QA runs, collect screenshot and browser evidence, generate findings, and review results in one dashboard.</p>
         </div>
 
-        {error ? <div style={{ ...panelStyle, borderColor: "#7d2438", color: "#ffd5dd" }}><strong>Error:</strong> {error}</div> : null}
+        {error ? <div className="rounded-2xl border border-red-800 bg-red-950/30 p-5 text-red-100"><strong>Error:</strong> {error}</div> : null}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 16, alignItems: "start" }}>
-          <section style={panelStyle}>
-            <h2 style={{ marginTop: 0 }}>Create run</h2>
-            <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
-              <input value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })} placeholder="Project ID" style={fieldStyle} />
-              <input value={form.environmentId} onChange={(e) => setForm({ ...form, environmentId: e.target.value })} placeholder="Environment ID" style={fieldStyle} />
-              <input value={form.targetUrl} onChange={(e) => setForm({ ...form, targetUrl: e.target.value })} placeholder="Target URL" style={fieldStyle} />
-              <input value={form.loginEmail} onChange={(e) => setForm({ ...form, loginEmail: e.target.value })} placeholder="Login email (optional)" style={fieldStyle} />
-              <input value={form.loginPassword} onChange={(e) => setForm({ ...form, loginPassword: e.target.value })} placeholder="Login password (optional)" type="password" style={fieldStyle} />
-              <button style={buttonStyle} type="submit" disabled={isSubmitting}>{isSubmitting ? "Queueing..." : "Queue run"}</button>
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
+          <section className={panelClassName}>
+            <h2 className="mt-0 text-lg font-semibold">Create run</h2>
+            <form onSubmit={handleSubmit} className="grid gap-3">
+              <input className={fieldClassName} value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })} placeholder="Project ID" />
+              <input className={fieldClassName} value={form.environmentId} onChange={(event) => setForm({ ...form, environmentId: event.target.value })} placeholder="Environment ID" />
+              <input className={fieldClassName} value={form.targetUrl} onChange={(event) => setForm({ ...form, targetUrl: event.target.value })} placeholder="https://example.com" />
+              <input className={fieldClassName} value={form.loginEmail} onChange={(event) => setForm({ ...form, loginEmail: event.target.value })} placeholder="Login email (optional)" />
+              <input className={fieldClassName} value={form.loginPassword} onChange={(event) => setForm({ ...form, loginPassword: event.target.value })} placeholder="Login password (optional)" type="password" />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Button type="submit" className="font-bold" disabled={isSubmitting || isClearing}>{isSubmitting ? "Queueing..." : "Queue run"}</Button>
+                <Button variant="outline" type="button" onClick={() => void handleClearAll()} disabled={isSubmitting || isClearing}>{isClearing ? "Clearing..." : "Clear all"}</Button>
+              </div>
             </form>
           </section>
 
-          <section style={panelStyle}>
-            <h2 style={{ marginTop: 0 }}>Execution pipeline</h2>
-            <ul style={{ margin: 0, paddingLeft: 18, color: "#c9d3e7", display: "grid", gap: 8 }}>
-              <li>Queue run</li>
-              <li>Launch Playwright browser worker</li>
-              <li>Attempt login with email/password when provided</li>
-              <li>Capture screenshot, console, network, and accessibility evidence</li>
-              <li>Run AI analysis and write findings</li>
+          <section className={`${panelClassName} flex flex-col`}>
+            <h2 className="mt-0 text-lg font-semibold">Execution pipeline</h2>
+            <ul className="m-0 grid list-disc gap-2 pl-4.5 text-secondary">
+              <li>Queue run</li><li>Launch Playwright browser worker</li><li>Attempt login with email/password when provided</li><li>Capture screenshot, console, network, and accessibility evidence</li><li>Run AI analysis and write findings</li>
             </ul>
+            <Button type="button" onClick={() => setIsFindingsModalOpen(true)} disabled={!selectedRunId} className="mt-auto self-start font-bold">
+              Open findings{findings.length > 0 ? ` (${findings.length})` : ""}
+            </Button>
           </section>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "0.9fr 1.1fr", gap: 16, alignItems: "start" }}>
-          <section style={panelStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <h2 style={{ margin: 0 }}>Runs</h2>
-              <button type="button" style={secondaryButtonStyle} onClick={() => void loadRuns()}>Refresh</button>
-            </div>
-            {isLoadingRuns ? <p style={{ color: "#8aa0c8" }}>Loading runs...</p> : null}
-            <div style={{ display: "grid", gap: 12 }}>
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
+          <section className={panelClassName}>
+            <div className="mb-3 flex items-center justify-between"><h2 className="m-0 text-lg font-semibold">Runs</h2><Button variant="secondary" size="sm" type="button" onClick={() => void loadRuns()}>Refresh</Button></div>
+            {isLoadingRuns ? <p className="text-muted">Loading runs...</p> : null}
+            <div className="grid gap-3">
               {runs.map((run) => (
-                <button key={run.id} type="button" onClick={() => setSelectedRunId(run.id)} style={{ ...runCardStyle, borderColor: selectedRunId === run.id ? "#4b7cff" : "#213158" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                    <strong>{run.id}</strong>
-                    <StatusBadge status={run.status} />
-                  </div>
-                  <div style={{ color: "#8aa0c8", marginTop: 6 }}>{run.target_url}</div>
-                  <div style={{ color: "#c9d3e7", marginTop: 10, fontSize: 14 }}>Project: {run.project_id}</div>
-                </button>
+                <Button key={run.id} variant="ghost" type="button" onClick={() => setSelectedRunId(run.id)} className={`block w-full rounded-xl border bg-surface p-4 text-left ${selectedRunId === run.id ? "border-lime-spark" : "border-border"}`}>
+                  <div className="flex gap-3 justify-between"><strong>{run.id}</strong><StatusBadge status={run.status} /></div>
+                  <div className="mt-1.5 text-muted">{run.target_url}</div><div className="mt-2.5 text-xs text-secondary">Project: {run.project_id}</div>
+                </Button>
               ))}
-              {!isLoadingRuns && runs.length === 0 ? <p style={{ color: "#8aa0c8" }}>No runs yet.</p> : null}
+              {!isLoadingRuns && runs.length === 0 ? <p className="text-muted">No runs yet.</p> : null}
             </div>
           </section>
 
-          <section style={panelStyle}>
-            <h2 style={{ marginTop: 0 }}>Run detail</h2>
-            {selectedSummary ? (
-              <div style={{ display: "grid", gap: 14 }}>
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div><strong>ID:</strong> {selectedSummary.id}</div>
-                  <div><strong>Status:</strong> <StatusBadge status={selectedSummary.status} /></div>
-                  <div><strong>Project:</strong> {selectedSummary.project_id}</div>
-                  <div><strong>Environment:</strong> {selectedSummary.environment_id ?? "-"}</div>
-                  <div><strong>Target URL:</strong> {selectedSummary.target_url}</div>
-                  <div><strong>Created:</strong> {formatDate(selectedSummary.created_at)}</div>
-                  <div><strong>Updated:</strong> {formatDate(selectedSummary.updated_at)}</div>
-                  <div><strong>Artifact directory:</strong> {selectedSummary.artifact_dir ?? "pending"}</div>
-                </div>
-
-                {selectedSummary.error_message ? (
-                  <div style={{ color: "#ffd5dd", whiteSpace: "pre-wrap" }}>
-                    <strong>Worker error:</strong>
-                    <div style={{ marginTop: 6 }}>{selectedSummary.error_message}</div>
-                  </div>
-                ) : null}
-
-                {screenshotUrl ? (
-                  <div>
-                    <div style={{ marginBottom: 8 }}><strong>Screenshot</strong></div>
-                    <img src={screenshotUrl} alt="Run screenshot" style={{ width: "100%", borderRadius: 12, border: "1px solid #213158", background: "#0d152b" }} />
-                  </div>
-                ) : null}
-              </div>
-            ) : <p style={{ color: "#8aa0c8" }}>Select a run to inspect details.</p>}
+          <section className={panelClassName}>
+            <h2 className="mt-0 text-lg font-semibold">Run detail</h2>
+            {selectedSummary ? <div className="grid gap-3.5">
+              <div className="grid gap-2"><div><strong>ID:</strong> {selectedSummary.id}</div><div><strong>Status:</strong> <StatusBadge status={selectedSummary.status} /></div><div><strong>Project:</strong> {selectedSummary.project_id}</div><div><strong>Environment:</strong> {selectedSummary.environment_id ?? "-"}</div><div><strong>Target URL:</strong> {selectedSummary.target_url}</div><div><strong>Created:</strong> {formatDate(selectedSummary.created_at)}</div><div><strong>Updated:</strong> {formatDate(selectedSummary.updated_at)}</div><div><strong>Artifact directory:</strong> {selectedSummary.artifact_dir ?? "pending"}</div></div>
+              {selectedSummary.error_message ? <div className="whitespace-pre-wrap text-red-100"><strong>Worker error:</strong><div className="mt-1.5">{selectedSummary.error_message}</div></div> : null}
+              {screenshotUrl ? <div><div className="mb-2"><strong>Screenshot</strong></div><img src={screenshotUrl} alt="Run screenshot" className="w-full rounded-xl border border-border bg-surface" /></div> : null}
+            </div> : <p className="text-muted">Select a run to inspect details.</p>}
           </section>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
-          <section style={panelStyle}>
-            <h2 style={{ marginTop: 0 }}>Findings</h2>
-            <div style={{ display: "grid", gap: 12 }}>
-              {findings.map((finding) => (
-                <article key={finding.id} style={findingCardStyle}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                    <strong>{finding.title}</strong>
-                    <SeverityBadge severity={finding.severity} />
-                  </div>
-                  <div style={{ color: "#8aa0c8", marginTop: 6 }}>{finding.category} · confidence {Math.round(finding.confidence * 100)}%</div>
-                  <p style={{ marginBottom: 0, color: "#dbe6fb" }}>{finding.description}</p>
-                  <div style={{ color: "#c9d3e7" }}><strong>Observed:</strong> {finding.observed_behavior}</div>
-                  <div>
-                    <strong>Steps</strong>
-                    <ol style={{ margin: "8px 0 0", paddingLeft: 20, color: "#c9d3e7" }}>
-                      {finding.reproduction_steps.map((step, index) => <li key={`${finding.id}-${index}`}>{step}</li>)}
-                    </ol>
-                  </div>
-                </article>
-              ))}
-              {selectedRunId && findings.length === 0 ? <p style={{ color: "#8aa0c8" }}>No findings yet or analysis still running.</p> : null}
-            </div>
-          </section>
-
-          <section style={panelStyle}>
-            <h2 style={{ marginTop: 0 }}>Evidence summary</h2>
-            {evidence ? (
-              <div style={{ display: "grid", gap: 12 }}>
-                <div><strong>Title:</strong> {evidence.title ?? "-"}</div>
-                <div><strong>Final URL:</strong> {evidence.finalUrl ?? evidence.targetUrl ?? "-"}</div>
-                <div>
-                  <strong>Actions</strong>
-                  <ul style={listStyle}>{(evidence.actions ?? []).map((item) => <li key={item}>{item}</li>)}</ul>
-                </div>
-                <div>
-                  <strong>Console messages</strong>
-                  <ul style={listStyle}>{(evidence.consoleMessages ?? []).slice(0, 10).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul>
-                </div>
-                <div>
-                  <strong>Failed requests</strong>
-                  <ul style={listStyle}>{(evidence.failedRequests ?? []).slice(0, 10).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul>
-                </div>
-                <div>
-                  <strong>HTTP errors</strong>
-                  <ul style={listStyle}>{(evidence.errorResponses ?? []).slice(0, 10).map((item, index) => <li key={`${item.url}-${index}`}>{item.method} {item.status} {item.url}</li>)}</ul>
-                </div>
-                <div>
-                  <strong>axe violations</strong>
-                  <ul style={listStyle}>{(evidence.axeViolations ?? []).slice(0, 10).map((item, index) => <li key={`${item.id}-${index}`}>{item.id} {item.impact ? `(${item.impact})` : ""} — {item.help ?? item.description}</li>)}</ul>
-                </div>
-              </div>
-            ) : <p style={{ color: "#8aa0c8" }}>Evidence will appear after the browser worker completes.</p>}
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
+          <section className={`${panelClassName} lg:col-span-2`}>
+            <h2 className="mt-0 text-lg font-semibold">Evidence summary</h2>
+            {evidence ? <div className="grid gap-3">
+              <div><strong>Title:</strong> {evidence.title ?? "-"}</div><div><strong>Final URL:</strong> {evidence.finalUrl ?? evidence.targetUrl ?? "-"}</div>
+              <EvidenceList title="Actions" items={evidence.actions ?? []} />
+              <EvidenceList title="Console messages" items={(evidence.consoleMessages ?? []).slice(0, 10)} />
+              <EvidenceList title="Failed requests" items={(evidence.failedRequests ?? []).slice(0, 10)} />
+              <EvidenceList title="HTTP errors" items={(evidence.errorResponses ?? []).slice(0, 10).map((item) => `${item.method} ${item.status} ${item.url}`)} />
+              <div><strong>Guideline checks</strong><div className="mt-2 text-secondary">Unlabeled controls: {evidence.guidelineChecks?.unlabeledFormControls?.length ?? 0} · Small targets: {evidence.guidelineChecks?.smallTargets?.length ?? 0} · Mobile overflow: {evidence.guidelineChecks?.viewport?.hasHorizontalOverflow ? "yes" : "no"} · Sampled tab stops: {evidence.guidelineChecks?.keyboard?.sampledTabStops?.length ?? 0}</div></div>
+              <EvidenceList title="axe violations" items={(evidence.axeViolations ?? []).slice(0, 10).map((item) => `${item.id} ${item.impact ? `(${item.impact})` : ""} — ${item.help ?? item.description}`)} />
+            </div> : <p className="text-muted">Evidence will appear after the browser worker completes.</p>}
           </section>
         </div>
       </section>
+      <Modal open={isFindingsModalOpen} onClose={() => setIsFindingsModalOpen(false)} title={`Findings (${findings.length})`} className="max-w-4xl">
+        <div className="grid gap-3">
+          {findings.map((finding) => <article key={finding.id} className="grid gap-2.5 rounded-xl border border-border bg-surface p-4">
+            <div className="flex items-center justify-between gap-3"><strong>{finding.title}</strong><SeverityBadge severity={finding.severity} /></div>
+            <div className="mt-1.5 text-muted">{finding.category} · confidence {Math.round(finding.confidence * 100)}% · {finding.verification_status.replaceAll("_", " ")}</div>
+            {finding.guideline_id ? <div className="text-secondary"><strong>Guideline:</strong> {finding.guideline_source_url ? <a href={finding.guideline_source_url} target="_blank" rel="noreferrer" className="text-lime-spark underline underline-offset-2">{finding.guideline_id}</a> : finding.guideline_id}</div> : null}
+            <p className="mb-0 text-ink">{finding.description}</p><div className="text-secondary"><strong>Observed:</strong> {finding.observed_behavior}</div>
+            <div><strong>Steps</strong><ol className="mt-2 grid list-decimal gap-1.5 pl-5 text-secondary">{finding.reproduction_steps.map((step, index) => <li key={`${finding.id}-${index}`}>{step}</li>)}</ol></div>
+          </article>)}
+          {selectedRunId && findings.length === 0 ? <p className="text-muted">No findings yet or analysis is still running.</p> : null}
+        </div>
+      </Modal>
     </main>
   );
 }
 
+function EvidenceList({ title, items }: { title: string; items: string[] }) {
+  return <div><strong>{title}</strong><ul className="mt-2 grid list-disc gap-1.5 pl-4.5 text-secondary">{items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>;
+}
+
 function StatusBadge({ status }: { status: RunStatus }) {
-  return <span style={{ display: "inline-flex", alignItems: "center", borderRadius: 999, padding: "6px 10px", fontSize: 12, background: statusColors[status].background, color: statusColors[status].color, border: `1px solid ${statusColors[status].border}` }}>{status}</span>;
+  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1.5 text-[11px] ${statusClasses[status]}`}>{status}</span>;
 }
 
 function SeverityBadge({ severity }: { severity: FindingSeverity }) {
-  return <span style={{ display: "inline-flex", alignItems: "center", borderRadius: 999, padding: "6px 10px", fontSize: 12, background: severityColors[severity].background, color: severityColors[severity].color, border: `1px solid ${severityColors[severity].border}` }}>{severity}</span>;
+  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1.5 text-[11px] ${severityClasses[severity]}`}>{severity}</span>;
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleString();
-}
+function formatDate(value: string) { return new Date(value).toLocaleString(); }
 
-const panelStyle: CSSProperties = { background: "#111933", border: "1px solid #213158", borderRadius: 16, padding: 20 };
-const fieldStyle: CSSProperties = { width: "100%", background: "#091024", color: "#f4f7fb", border: "1px solid #213158", borderRadius: 10, padding: "12px 14px" };
-const buttonStyle: CSSProperties = { border: 0, borderRadius: 10, padding: "12px 14px", background: "#4b7cff", color: "white", cursor: "pointer" };
-const secondaryButtonStyle: CSSProperties = { border: "1px solid #213158", borderRadius: 10, padding: "10px 12px", background: "#091024", color: "#f4f7fb", cursor: "pointer" };
-const runCardStyle: CSSProperties = { textAlign: "left", border: "1px solid #213158", borderRadius: 12, padding: 16, background: "#0d152b", color: "#f4f7fb", cursor: "pointer" };
-const findingCardStyle: CSSProperties = { border: "1px solid #213158", borderRadius: 12, padding: 16, background: "#0d152b", display: "grid", gap: 10 };
-const listStyle: CSSProperties = { margin: "8px 0 0", paddingLeft: 18, color: "#c9d3e7", display: "grid", gap: 6 };
-
-const statusColors: Record<RunStatus, { background: string; color: string; border: string }> = {
-  queued: { background: "#1c294e", color: "#c6d7ff", border: "#33539f" },
-  running: { background: "#1d3650", color: "#c9f0ff", border: "#32779d" },
-  analyzing: { background: "#392d18", color: "#ffe4a4", border: "#8f6d1f" },
-  completed: { background: "#183625", color: "#c6ffd9", border: "#2a8f58" },
-  failed: { background: "#411c25", color: "#ffd5dd", border: "#a03b52" },
-  cancelled: { background: "#2f3240", color: "#dce0eb", border: "#6b7280" }
+const statusClasses: Record<RunStatus, string> = {
+  queued: "border-blue-500/60 bg-blue-950 text-blue-100", running: "border-cyan-500/60 bg-cyan-950 text-cyan-100", analyzing: "border-amber-500/60 bg-amber-950 text-amber-100", completed: "border-emerald-500/60 bg-emerald-950 text-emerald-100", failed: "border-red-500/60 bg-red-950 text-red-100", cancelled: "border-slate-500/60 bg-slate-800 text-slate-100"
 };
-
-const severityColors: Record<FindingSeverity, { background: string; color: string; border: string }> = {
-  low: { background: "#1b3042", color: "#d3eeff", border: "#2d618d" },
-  medium: { background: "#392d18", color: "#ffe4a4", border: "#8f6d1f" },
-  high: { background: "#4a2416", color: "#ffd6c9", border: "#b15b39" },
-  critical: { background: "#4a1822", color: "#ffd5dd", border: "#b13c56" }
+const severityClasses: Record<FindingSeverity, string> = {
+  low: "border-sky-500/60 bg-sky-950 text-sky-100", medium: "border-amber-500/60 bg-amber-950 text-amber-100", high: "border-orange-500/60 bg-orange-950 text-orange-100", critical: "border-red-500/60 bg-red-950 text-red-100"
 };
