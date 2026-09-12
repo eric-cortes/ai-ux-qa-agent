@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
-import { chromium, type Browser, type Locator, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 
 import { assertSafeTarget, parseAllowedDomains } from "./ssrf";
 
@@ -20,6 +20,7 @@ async function main() {
   const gotoTimeoutMs = parseInt(process.env.BROWSER_GOTO_TIMEOUT_MS ?? `${DEFAULT_GOTO_TIMEOUT_MS}`, 10);
   const maxRuntimeMs = parseInt(process.env.BROWSER_MAX_RUNTIME_MS ?? `${DEFAULT_MAX_RUNTIME_MS}`, 10);
   const allowedDomains = parseAllowedDomains(process.env.TARGET_URL_ALLOWED_DOMAINS);
+  const allowLocalTargets = process.env.ALLOW_LOCAL_TARGETS === "true";
   const runDir = path.join(artifactDir, runId);
 
   const timeoutHandle = setTimeout(() => {
@@ -35,7 +36,8 @@ async function main() {
       loginEmail,
       loginPassword,
       gotoTimeoutMs,
-      allowedDomains
+      allowedDomains,
+      allowLocalTargets
     });
   } finally {
     clearTimeout(timeoutHandle);
@@ -49,7 +51,8 @@ async function executeRun({
   loginEmail,
   loginPassword,
   gotoTimeoutMs,
-  allowedDomains
+  allowedDomains,
+  allowLocalTargets
 }: {
   runId: string;
   targetUrl: string;
@@ -58,16 +61,19 @@ async function executeRun({
   loginPassword?: string;
   gotoTimeoutMs: number;
   allowedDomains: string[];
+  allowLocalTargets: boolean;
 }) {
   await mkdir(runDir, { recursive: true });
-  await assertSafeTarget(targetUrl, allowedDomains);
+  await assertSafeTarget(targetUrl, allowedDomains, allowLocalTargets);
 
   let browser: Browser | null = null;
+  let context: BrowserContext | null = null;
   let page: Page | null = null;
 
   try {
     browser = await chromium.launch();
-    page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
+    context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+    page = await context.newPage();
 
     const consoleMessages: string[] = [];
     const failedRequests: string[] = [];
@@ -101,6 +107,12 @@ async function executeRun({
     }
 
     await page.screenshot({ path: path.join(runDir, "page.png"), fullPage: true });
+    const guidelineChecks = await collectGuidelineChecks(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: path.join(runDir, "mobile.png"), fullPage: true });
+    guidelineChecks.viewport = await collectViewportEvidence(page);
+    await page.setViewportSize({ width: 1440, height: 960 });
 
     const accessibility = await new AxeBuilder({ page }).analyze();
     const title = await page.title();
@@ -132,7 +144,8 @@ async function executeRun({
           failedRequests,
           errorResponses: responses,
           interactiveElements,
-          axeViolations: accessibility.violations
+          axeViolations: accessibility.violations,
+          guidelineChecks
         },
         null,
         2,
@@ -142,10 +155,64 @@ async function executeRun({
     console.log(`Saved evidence to ${runDir}`);
   } finally {
     await page?.close().catch(() => undefined);
+    await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
   }
 }
 
+
+type GuidelineChecks = {
+  unlabeledFormControls: Array<{ tag: string; type: string | null; name: string | null }>;
+  smallTargets: Array<{ tag: string; text: string; width: number; height: number }>;
+  keyboard: { sampledTabStops: string[]; focusLostToDocument: boolean };
+  viewport?: { width: number; scrollWidth: number; hasHorizontalOverflow: boolean };
+};
+
+async function collectGuidelineChecks(page: Page): Promise<GuidelineChecks> {
+  const structuralChecks = await page.evaluate(() => {
+    const unlabeledFormControls = Array.from(document.querySelectorAll("input, select, textarea"))
+      .filter((element) => {
+        const input = element as HTMLInputElement;
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        const isVisible = style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+        return isVisible && !["hidden", "submit", "button", "reset", "image"].includes(input.type) &&
+          !input.labels?.length && !element.getAttribute("aria-label") && !element.getAttribute("aria-labelledby");
+      })
+      .slice(0, 30)
+      .map((element) => ({ tag: element.tagName.toLowerCase(), type: element.getAttribute("type"), name: element.getAttribute("name") }));
+    const smallTargets = Array.from(document.querySelectorAll("a, button, input, select, textarea, [role='button'], [role='link']"))
+      .filter((element) => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+      })
+      .map((element) => ({ element, rect: element.getBoundingClientRect(), display: window.getComputedStyle(element).display }))
+      .filter(({ element, rect, display }) => !(element.tagName === "A" && display === "inline") && (rect.width < 24 || rect.height < 24))
+      .slice(0, 30)
+      .map(({ element, rect }) => ({ tag: element.tagName.toLowerCase(), text: (element.textContent ?? "").trim().slice(0, 120), width: Math.round(rect.width), height: Math.round(rect.height) }));
+    return { unlabeledFormControls, smallTargets };
+  });
+
+  const sampledTabStops: string[] = [];
+  for (let index = 0; index < 8; index += 1) {
+    await page.keyboard.press("Tab");
+    sampledTabStops.push(await page.evaluate(() => {
+      const element = document.activeElement as HTMLElement | null;
+      return element ? `${element.tagName.toLowerCase()}#${element.id}.${element.getAttribute("role") ?? ""}` : "none";
+    }));
+  }
+  const focusLostToDocument = sampledTabStops.includes("body#.");
+  return { ...structuralChecks, keyboard: { sampledTabStops, focusLostToDocument } };
+}
+
+async function collectViewportEvidence(page: Page) {
+  return page.evaluate(() => ({
+    width: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    hasHorizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1
+  }));
+}
 
 async function tryLogin(page: Page, email: string, password: string, actions: string[]) {
   const emailLocator = await firstVisible(page, [

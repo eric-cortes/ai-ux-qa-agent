@@ -4,6 +4,7 @@ import {
   assertSafeTarget,
   isBlockedAddress,
   isBlockedHostname,
+  isLocalAddress,
   matchesAllowedDomain,
   parseAllowedDomains,
 } from "./ssrf";
@@ -58,6 +59,15 @@ describe("assertSafeTarget (IP literals only — no DNS)", () => {
 
   it("allows a public IP literal", async () => {
     await expect(assertSafeTarget("http://93.184.216.34/", [])).resolves.toBeUndefined();
+  });
+
+  it("allows loopback targets only when explicitly enabled", async () => {
+    expect(isLocalAddress("127.0.0.1")).toBe(true);
+    expect(isLocalAddress("::1")).toBe(true);
+    expect(isLocalAddress("192.168.1.1")).toBe(false);
+    await expect(assertSafeTarget("http://127.0.0.1:3000/", [], true)).resolves.toBeUndefined();
+    await expect(assertSafeTarget("http://localhost:3000/", [], true)).resolves.toBeUndefined();
+    await expect(assertSafeTarget("http://192.168.1.1/", [], true)).rejects.toThrow();
   });
 
   it("enforces the allowlist against a public IP literal", async () => {
