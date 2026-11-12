@@ -2,6 +2,11 @@
   "name": "ai-ux-qa-agent",
   "private": true,
   "packageManager": "pnpm@10.0.0",
+  "pnpm": {
+    "overrides": {
+      "sharp": ">=0.35.5"
+    }
+  },
   "scripts": {
     "dev": "./dev.sh",
     "dev:web": "pnpm --filter web dev",
