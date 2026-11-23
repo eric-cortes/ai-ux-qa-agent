@@ -1,0 +1,11 @@
+{
+  "title": "Execution pipeline",
+  "steps": [
+    "Queue run",
+    "Launch Playwright browser worker",
+    "Attempt login with email/password when provided",
+    "Capture screenshot, console, network, and accessibility evidence",
+    "Run AI analysis and write findings"
+  ],
+  "openFindings": "Open findings ({count, plural, one {# finding} other {# findings}})"
+}

@@ -1,0 +1,13 @@
+{
+  "title": "Evidence summary",
+  "empty": "Evidence will appear after the browser worker completes.",
+  "pageTitle": "Title",
+  "finalUrl": "Final URL",
+  "actions": "Actions",
+  "consoleMessages": "Console messages",
+  "failedRequests": "Failed requests",
+  "httpErrors": "HTTP errors",
+  "axeViolations": "Accessibility violations",
+  "guidelines": "Guideline checks",
+  "guidelineSummary": "Unlabeled controls: {unlabeled, number} \u00b7 Small targets: {small, number} \u00b7 Mobile overflow: {overflow, select, yes {yes} other {no}} \u00b7 Sampled tab stops: {tabs, number}"
+}

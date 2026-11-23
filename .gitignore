@@ -10,3 +10,16 @@ storage/artifacts/*
 !storage/artifacts/.gitkeep
 *.pyc
 .DS_Store
+
+next-env.d.ts
+*.tsbuildinfo
+out
+.vercel
+dist
+build
+coverage
+playwright-report
+test-results
+*.log
+.env*
+!.env.example

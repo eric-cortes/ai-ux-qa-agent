@@ -1,0 +1,30 @@
+# Roots make staged paths relative to each package's ESLint configuration.
+pre-commit:
+  parallel: false
+  commands:
+    format:
+      run: pnpm exec prettier --write --ignore-unknown {staged_files}
+      stage_fixed: true
+    lint-fix-web:
+      root: apps/web/
+      glob: '*.{js,jsx,ts,tsx,mjs,cjs}'
+      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
+      stage_fixed: true
+    lint-fix-browser-worker:
+      root: workers/browser/
+      glob: '*.{js,jsx,ts,tsx,mjs,cjs}'
+      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
+      stage_fixed: true
+    lint-fix-shared-types:
+      root: packages/shared-types/
+      glob: '*.{js,jsx,ts,tsx,mjs,cjs}'
+      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
+      stage_fixed: true
+    tailwind:
+      root: apps/web/
+      run: pnpm check:tailwind
+pre-push:
+  parallel: false
+  commands:
+    validate:
+      run: pnpm validate

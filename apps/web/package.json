@@ -6,26 +6,40 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "next typegen && tsc --noEmit",
+    "check:tailwind": "node scripts/check-tailwind.mjs",
+    "test": "vitest run",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@ai-ux-qa/shared-types": "workspace:*",
-    "@tanstack/react-query": "^5.87.4",
-    "clsx": "^2.1.1",
-    "lucide-react": "^0.542.0",
-    "next": "15.5.28",
-    "react": "19.1.10",
-    "react-dom": "19.1.10",
-    "zod": "^4.1.5",
-    "zustand": "^5.0.8"
+    "@base-ui/react": "1.9.0",
+    "clsx": "2.1.1",
+    "next": "16.4.6",
+    "next-intl": "4.16.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-icons": "5.7.0",
+    "tailwind-merge": "3.7.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^24.3.0",
-    "@types/react": "^19.1.12",
-    "@types/react-dom": "^19.1.9",
-    "eslint-config-next": "15.5.9",
-    "tailwindcss": "^4.1.13",
-    "typescript": "^5.9.2"
+    "@playwright/test": "1.65.1",
+    "@tailwindcss/postcss": "4.3.5",
+    "tailwindcss": "4.3.5",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/jest-dom": "8.0.0",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@typescript-eslint/parser": "8.73.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "eslint": "10.15.0",
+    "eslint-config-next": "16.4.6",
+    "jsdom": "31.0.1",
+    "typescript": "6.0.3",
+    "vitest": "5.1.1"
   }
 }

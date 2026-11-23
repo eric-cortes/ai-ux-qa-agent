@@ -1,0 +1,15 @@
+{
+  "title": "Run detail",
+  "empty": "Select a run to inspect details.",
+  "id": "ID",
+  "status": "Status",
+  "project": "Project",
+  "environment": "Environment",
+  "targetUrl": "Target URL",
+  "created": "Created",
+  "updated": "Updated",
+  "artifactDirectory": "Artifact directory",
+  "screenshot": "Screenshot",
+  "pending": "Pending",
+  "screenshotAlt": "Screenshot for run {id}"
+}

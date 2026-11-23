@@ -1,0 +1,7 @@
+{
+  "notAvailable": "Not available",
+  "confirmTitle": "Delete all runs?",
+  "confirmDescription": "Delete all runs and saved artifacts? This cannot be undone.",
+  "confirm": "Delete all runs",
+  "cancel": "Cancel"
+}

@@ -1,0 +1,28 @@
+{
+  "status": {
+    "queued": "Queued",
+    "running": "Running",
+    "analyzing": "Analyzing",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+  "severity": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "critical": "Critical"
+  },
+  "category": {
+    "ux": "UX",
+    "accessibility": "Accessibility",
+    "functional": "Functional",
+    "network": "Network",
+    "performance": "Performance"
+  },
+  "verification": {
+    "confirmed": "Confirmed",
+    "likely": "Likely",
+    "needs_human_review": "Needs human review"
+  }
+}
