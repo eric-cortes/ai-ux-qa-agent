@@ -1,3 +1,0 @@
-# Use gitleaks' bundled default rules; add allowlist entries here if needed.
-[extend]
-useDefault = true

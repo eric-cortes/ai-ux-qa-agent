@@ -1,0 +1,7 @@
+{
+  "title": "Runs",
+  "refresh": "Refresh",
+  "loading": "Loading runs\u2026",
+  "empty": "No runs yet.",
+  "project": "Project: {project}"
+}

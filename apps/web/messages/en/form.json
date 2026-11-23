@@ -1,0 +1,17 @@
+{
+  "title": "Create run",
+  "projectId": "Project ID",
+  "environmentId": "Environment ID",
+  "targetUrl": "Target URL",
+  "loginEmail": "Login email (optional)",
+  "loginPassword": "Login password (optional)",
+  "projectIdPlaceholder": "Project ID",
+  "environmentIdPlaceholder": "Environment ID",
+  "targetUrlPlaceholder": "https://example.com",
+  "loginEmailPlaceholder": "Login email (optional)",
+  "loginPasswordPlaceholder": "Login password (optional)",
+  "queue": "Queue run",
+  "queueing": "Queueing\u2026",
+  "clear": "Clear all",
+  "clearing": "Clearing\u2026"
+}

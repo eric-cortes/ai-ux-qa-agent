@@ -1,0 +1,10 @@
+{
+  "title": "Findings ({count, number})",
+  "empty": "No findings yet or analysis is still running.",
+  "confidence": "Confidence: {value, number, percent}",
+  "guideline": "Guideline",
+  "observed": "Observed",
+  "steps": "Steps",
+  "category": "Category: {category}",
+  "verification": "Verification: {status}"
+}

@@ -1,38 +1,78 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --color-graphite: #23262f;
-  --color-panel: #2d303a;
-  --color-surface: #1b1d23;
-  --color-border: #454a57;
-  --color-ink: #f4f7fb;
-  --color-muted: #b9beca;
-  --color-secondary: #c9d3e7;
-  --color-lime-spark: #b6ff2e;
+  --color-brand: #b6ff2e;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--line);
+  --color-selected: var(--selected);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-soft: var(--ink-soft);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+  --color-action-fg: var(--action-fg);
+  --color-focus: var(--focus);
+  --color-danger: var(--danger);
+  --color-danger-fg: var(--danger-fg);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+}
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
 
 :root {
-  color-scheme: dark;
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-size: 0.875rem;
-  background: var(--color-graphite);
-  color: var(--color-ink);
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-input,
-button {
-  font: inherit;
+  --canvas: #f4f7fb;
+  --surface: #ffffff;
+  --surface-muted: #e6ebf2;
+  --line: #647084;
+  --selected: #426600;
+  --ink: #17202e;
+  --ink-muted: #465166;
+  --ink-soft: #3b475c;
+  --action: #b6ff2e;
+  --action-hover: #a4eb20;
+  --action-fg: #23262f;
+  --focus: #426600;
+  --danger: #ad182b;
+  --danger-fg: #ffffff;
+  --success: #176534;
+  --warning: #795000;
+  @variant contrast-more {
+    --line: #17202e;
+    --selected: #17202e;
+    --ink-muted: #17202e;
+    --ink-soft: #17202e;
+    --focus: #17202e;
+  }
+  @variant dark {
+    --canvas: #23262f;
+    --surface: #2d303a;
+    --surface-muted: #1b1d23;
+    --line: #929bad;
+    --selected: #b6ff2e;
+    --ink: #f4f7fb;
+    --ink-muted: #b9beca;
+    --ink-soft: #c9d3e7;
+    --action: #b6ff2e;
+    --action-hover: #a4eb20;
+    --action-fg: #23262f;
+    --focus: #b6ff2e;
+    --danger: #ff9eac;
+    --danger-fg: #23262f;
+    --success: #8ee5ac;
+    --warning: #ffda85;
+    @variant contrast-more {
+      --line: #ffffff;
+      --selected: #b6ff2e;
+      --ink-muted: #ffffff;
+      --ink-soft: #ffffff;
+      --focus: #ffffff;
+    }
+  }
 }

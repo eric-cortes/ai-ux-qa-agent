@@ -2,3 +2,17 @@ packages:
   - apps/*
   - workers/*
   - packages/*
+
+overrides:
+  sharp: '>=0.35.5'
+allowBuilds:
+  # Installs the git hooks binary.
+  lefthook: true
+  '@pnpm/exe': true # pnpm's own native binary.
+  '@parcel/watcher': true # Native watcher used by next-intl tooling.
+  '@swc/core': true # Native compiler used by next-intl tooling.
+  esbuild: false # Prebuilt binary comes from its platform package.
+  unrs-resolver: false # Prebuilt binary comes from its platform package.
+minimumReleaseAgeExclude:
+  - icu-minify@4.15.3
+  - next-intl@4.16.0

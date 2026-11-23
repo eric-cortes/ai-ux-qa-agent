@@ -1,0 +1,7 @@
+{
+  "loadRuns": "Unable to load runs. Please try again.",
+  "loadDetail": "Unable to load run detail. Please try again.",
+  "queueRun": "Unable to queue the run. Please try again.",
+  "clearRuns": "Unable to clear runs. Please try again.",
+  "workerFailed": "The worker could not complete this run."
+}

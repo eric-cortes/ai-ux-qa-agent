@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AI UX QA Agent · How it works</title>
+    <!-- Favicon: links to the app's own icon file, so there is only one. Next.js: ../app/icon.svg. Other apps: ../public/favicon.svg. -->
+    <link rel="icon" type="image/svg+xml" href="../apps/web/app/icon.svg" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #10141c;
+        --panel: #191f2b;
+        --line: #3c4960;
+        --text: #eef2fa;
+        --muted: #b2bfd3;
+        --ask: #edb891;
+        --records: #9cc9ff;
+        --agent: #c4b4ff;
+        --safety: #9ce0ba;
+        --import: #f2a7c8;
+        --tech: #ff6a00;
+        --neon: #39ff14;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background-color: var(--bg);
+        background-image:
+          repeating-linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--line) 40%, transparent) 0 1px,
+            transparent 1px 24px
+          ),
+          repeating-linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--line) 40%, transparent) 0 1px,
+            transparent 1px 24px
+          );
+        color: var(--text);
+        font:
+          15px/1.45 system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      main {
+        display: flex;
+        align-items: flex-start;
+        gap: 28px;
+        width: max-content;
+        padding: 20px 24px;
+        zoom: var(--z, 1);
+      }
+      body.zooming {
+        user-select: none;
+        -webkit-user-select: none;
+        cursor: crosshair;
+      }
+      .zoombox {
+        position: fixed;
+        z-index: 10;
+        pointer-events: none;
+        border: 1px solid var(--records);
+        background: color-mix(in srgb, var(--records) 15%, transparent);
+      }
+      main:focus-visible {
+        outline: 2px solid var(--records);
+        outline-offset: -2px;
+      }
+      main > * {
+        flex: none;
+        min-height: 0;
+      }
+      h1 {
+        font-size: clamp(26px, 3.4vw, 30px);
+        line-height: 1.15;
+        margin: 6px 0 10px;
+      }
+      h2 {
+        font-size: 17px;
+        margin: 0 0 6px;
+      }
+      h3 {
+        font-size: 16px;
+        margin: 0;
+      }
+      p {
+        margin: 6px 0;
+      }
+      .intro {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .eyebrow {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--ask);
+        font-weight: 750;
+      }
+      .col {
+        width: 340px;
+        padding-right: 4px;
+        height: calc(100vh / var(--z, 1) - 40px);
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+      }
+      .legend {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 16px 0 0;
+        padding: 10px 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .legend b {
+        color: var(--text);
+      }
+      .zoomhelp {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        z-index: 5;
+        padding: 10px 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .zoomhelp ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        font-size: inherit;
+      }
+      .lanes {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .lane {
+        flex: none;
+        display: flex;
+        align-items: stretch;
+        gap: 14px;
+      }
+      .lane > h3 {
+        flex: none;
+        width: 96px;
+        align-self: center;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 13px;
+        border-right: 1px solid var(--line);
+        padding-right: 12px;
+      }
+      .tl {
+        position: relative;
+        display: flex;
+        align-items: stretch;
+        min-height: 0;
+        padding-bottom: var(--band, 0px);
+      }
+      .backs {
+        position: absolute;
+        left: 0;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+      }
+      .bk {
+        position: absolute;
+        border: 2px solid currentColor;
+        border-top: 0;
+        border-radius: 0 0 14px 14px;
+        color: var(--ask);
+        visibility: hidden;
+      }
+      .bk::before {
+        content: '▲';
+        position: absolute;
+        left: 0;
+        top: -3px;
+        transform: translateX(-50%);
+        font-size: 11px;
+        line-height: 1;
+      }
+      .bk > span {
+        position: absolute;
+        left: 50%;
+        bottom: 0;
+        transform: translate(-50%, 50%);
+        background: var(--bg);
+        padding: 0 8px;
+        font-size: 12px;
+        font-weight: 650;
+        white-space: nowrap;
+        color: inherit;
+      }
+      .b-ask {
+        color: var(--ask);
+      }
+      .b-records {
+        color: var(--records);
+      }
+      .b-agent {
+        color: var(--agent);
+      }
+      .backtext {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .tl > * {
+        flex: none;
+      }
+      .tl > .box + .box {
+        margin-left: 14px;
+      }
+      .box {
+        width: 310px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        padding: 12px 14px;
+        max-height: 810px;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+      }
+      .box p {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 4px 0;
+      }
+      .ar {
+        align-self: center;
+        padding: 0 10px;
+        color: var(--muted);
+        font-size: 26px;
+        line-height: 1;
+      }
+      .num {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin-bottom: 2px;
+      }
+      .ask {
+        border-color: var(--ask);
+      }
+      .ask h2 {
+        color: var(--ask);
+      }
+      .records {
+        border-color: var(--records);
+      }
+      .records h2 {
+        color: var(--records);
+      }
+      .agent {
+        border-color: var(--agent);
+      }
+      .agent h2 {
+        color: var(--agent);
+      }
+      .import {
+        border-color: var(--import);
+      }
+      .import h2 {
+        color: var(--import);
+      }
+      .user {
+        border-color: var(--line);
+      }
+      .safety {
+        border-color: var(--safety);
+      }
+      .safety h2 {
+        color: var(--safety);
+      }
+      ul {
+        padding-left: 18px;
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      li {
+        margin: 3px 0;
+      }
+      .box .small {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      code {
+        font-size: 0.92em;
+        color: var(--text);
+      }
+      a {
+        color: var(--records);
+      }
+      .t {
+        color: var(--tech);
+        font-weight: 800;
+      }
+      .m,
+      code.model {
+        color: var(--neon);
+        font-weight: 800;
+      }
+      @media (max-width: 600px) {
+        .zoomhelp {
+          display: none;
+        }
+        main {
+          padding: 16px;
+          gap: 20px;
+        }
+        .col {
+          width: 280px;
+          height: calc(100vh - 32px);
+        }
+        .box {
+          width: 270px;
+          padding: 10px 12px;
+        }
+        .lane > h3 {
+          width: 80px;
+        }
+      }
+      @media print {
+        .zoomhelp {
+          display: none;
+        }
+        :root {
+          color-scheme: light;
+          --bg: white;
+          --panel: #f5f6f8;
+          --line: #8894a6;
+          --text: #111827;
+          --muted: #374151;
+          --ask: #8b4a20;
+          --records: #215c97;
+          --agent: #69429a;
+          --safety: #216841;
+          --import: #a3306a;
+          --tech: #a64200;
+        }
+        html,
+        body {
+          height: auto;
+          overflow: visible;
+        }
+        main {
+          zoom: 1;
+          display: block;
+          height: auto;
+          overflow: visible;
+          padding: 10px;
+          max-width: 850px;
+          margin: auto;
+        }
+        body {
+          font-size: 11px;
+          background-image: none;
+        }
+        .col {
+          width: auto;
+          overflow: visible;
+          height: auto;
+        }
+        h1 {
+          font-size: 26px;
+        }
+        h2 {
+          font-size: 14px;
+        }
+        h3 {
+          margin-top: 18px;
+        }
+        .lanes {
+          display: block;
+        }
+        .lane {
+          display: block;
+        }
+        .lane > h3 {
+          width: auto;
+          border: 0;
+          padding: 0;
+          margin: 18px 0 6px;
+          font-size: 16px;
+          color: var(--text);
+          text-transform: none;
+          letter-spacing: 0;
+        }
+        .tl {
+          flex-wrap: wrap;
+          gap: 6px 0;
+          padding-bottom: 0;
+        }
+        .backs {
+          display: none;
+        }
+        .backtext {
+          position: static;
+          width: auto;
+          height: auto;
+          overflow: visible;
+          clip: auto;
+          white-space: normal;
+          margin: 6px 0 0;
+          font-size: 11px;
+        }
+        .backtext li {
+          margin: 2px 0;
+        }
+        .box {
+          width: 220px;
+          padding: 9px 12px;
+          break-inside: avoid;
+          overflow: visible;
+          max-height: none;
+        }
+        .box p,
+        ul {
+          font-size: 11px;
+        }
+        .ar {
+          padding: 0 4px;
+        }
+        .legend {
+          flex-direction: row;
+          flex-wrap: wrap;
+          gap: 8px 22px;
+        }
+        .box .small {
+          font-size: 11px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="strip" tabindex="0" role="region" aria-label="How AI UX QA Agent works, scrolls sideways">
+      <header class="col">
+        <div class="eyebrow">Local QA · app map</div>
+        <h1>AI UX QA Agent</h1>
+
+        <h2>What is this?</h2>
+        <p class="intro">AI UX QA Agent is a local dashboard that queues browser QA runs and helps product teams review evidence and findings.</p>
+        <p class="intro">It does two jobs:</p>
+        <ul class="intro">
+          <li><b>Collect evidence.</b> Screenshots, network, console and accessibility checks.</li>
+          <li><b>Review findings.</b> Inspect AI suggestions and guideline checks before deciding what to fix.</li>
+        </ul>
+
+        <h2 style="margin-top: 14px">Who is it for?</h2>
+        <p class="intro">Product engineers and reviewers use the dashboard at localhost:3000; the API runs at localhost:8000, with local browser and AI worker processes.</p>
+        <p class="intro">
+          It makes repeatable browser checks and human review available in one place. Tools used: <span class="t">Next.js</span>. New words or tool names?
+          See the first two rows.
+        </p>
+
+        <div class="legend" aria-label="How to read this page">
+          <span><b>How to read this page</b></span
+          ><span>Start with the top row. Then scroll sideways. Scroll down for the next row.</span
+          ><span>The rows go from simple (what it does) to detailed (how it works).</span
+          ><span>Arrows (→) show the order of steps. A band that points back up is a loop.</span>
+        </div>
+        <div class="legend" aria-label="Colors">
+          <span><b>Colors</b></span
+          ><span><b style="color: var(--records)">Blue</b> = stored runs and evidence</span
+          ><span><b style="color: var(--ask)">Peach</b> = requests and analysis</span
+          ><span><b style="color: var(--agent)">Purple</b> = worker processing</span
+          ><span><b style="color: var(--import)">Pink</b> = artifacts and results</span
+          ><span><b style="color: var(--safety)">Green</b> = validation and safety</span
+          ><span><b>Gray</b> = human actions</span
+          ><span
+            ><b class="t">Bold orange text</b> = a technology (a tool the app is built with). The
+            tools row explains each one.</span
+          ><span
+            ><b class="m">Bold neon green text</b> = an AI model or agent (like the <span class="m">QA analysis agent</span>).</span
+          >
+        </div>
+      </header>
+
+      <div class="lanes">
+<div class="lane"><h3>Words you'll see</h3><div class="tl"><section class="box records"><h2>Runs and evidence</h2><p><b>Run</b>: one QA attempt on a target URL.<br/><b>Project / environment</b>: identifiers supplied by the reviewer.<br/><b>Evidence</b>: screenshots, actions, console, network and accessibility observations.</p></section><div class="ar" aria-hidden="true">→</div><section class="box ask"><h2>Findings and review</h2><p><b>Finding</b>: a suggested issue with severity and confidence.<br/><b>Verification</b>: confirmed, likely or needs human review.<br/><b>Guideline</b>: a check or reference explaining a possible issue.</p></section></div></div>
+<div class="lane"><h3>Tools and what they do</h3><div class="tl"><section class="box user"><h2>Screens</h2><p><span class="t">@ai-ux-qa/shared-types</span> workspace:*: workspace schema contract<br/><span class="t">@base-ui/react</span> 1.9.0: accessible buttons, fields and dialogs<br/><span class="t">clsx</span> 2.1.1: conditional class selection<br/><span class="t">next</span> 16.4.6: server pages and web runtime<br/><span class="t">next-intl</span> 4.16.0: English messages and metadata<br/><span class="t">react</span> 19.3.1: component state and rendering<br/><span class="t">react-dom</span> 19.3.1: browser rendering<br/><span class="t">react-icons</span> 5.7.0: Radix icon collection<br/><span class="t">tailwind-merge</span> 3.7.1: resolves conflicting utilities<br/><span class="t">@playwright/test</span> 1.65.1: browser E2E runner<br/><span class="t">@tailwindcss/postcss</span> 4.3.5: <span class="t">Tailwind</span> PostCSS integration<br/><span class="t">tailwindcss</span> 4.3.5: utility styles and theme tokens<br/><span class="t">@testing-library/dom</span> 10.4.2: DOM assertions and queries<br/><span class="t">@testing-library/jest-dom</span> 8.0.0: accessible DOM matchers<br/><span class="t">@testing-library/react</span> 16.3.3: component interaction tests<br/><span class="t">@types/node</span> 26.6.6: <span class="t">TypeScript</span> declarations<br/><span class="t">@types/react</span> 19.3.0: <span class="t">TypeScript</span> declarations<br/><span class="t">@types/react-dom</span> 19.3.0: <span class="t">TypeScript</span> declarations<br/><span class="t">@typescript-eslint/parser</span> 8.73.0: <span class="t">Tailwind</span> checker syntax parsing<br/><span class="t">@vitejs/plugin-react</span> 6.3.0: <span class="t">React</span> compilation in <span class="t">Vitest</span><br/><span class="t">eslint</span> 10.15.0: <span class="t">JavaScript</span> and <span class="t">TypeScript</span> linting<br/><span class="t">eslint-config-next</span> 16.4.6: <span class="t">Next.js</span> lint rules<br/><span class="t">jsdom</span> 31.0.1: test DOM<br/><span class="t">typescript</span> 6.0.3: static type checking<br/><span class="t">vitest</span> 5.1.1: unit and component tests</p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"><h2>Browser and schemas</h2><p><span class="t">@axe-core/playwright</span> 4.14.0: accessibility evidence<br/><span class="t">@ai-ux-qa/shared-types</span> workspace:*: workspace schema contract<br/><span class="t">dotenv</span> 18.0.10: worker environment loading<br/><span class="t">playwright</span> 1.65.1: browser automation and evidence<br/><span class="t">zod</span> 4.6.7: shared runtime schemas<br/><span class="t">eslint</span> 10.15.0: <span class="t">JavaScript</span> and <span class="t">TypeScript</span> linting<br/><span class="t">@eslint/js</span> 10.0.1: recommended <span class="t">JavaScript</span> rules<br/><span class="t">typescript-eslint</span> 8.73.0: recommended <span class="t">TypeScript</span> rules<br/><span class="t">globals</span> 17.14.0: <span class="t">Node</span> global definitions<br/><span class="t">typescript</span> 6.0.3: static type checking<br/><span class="t">vitest</span> 5.1.1: unit and component tests<br/><span class="t">@types/node</span> 26.6.6: <span class="t">TypeScript</span> declarations<br/><span class="t">tsx</span> 4.23.15: runs the <span class="t">TypeScript</span> worker</p></section><div class="ar" aria-hidden="true">→</div><section class="box safety"><h2>Run and test</h2><p><span class="t">prettier</span> 3.10.1: repository formatting<br/><span class="t">lefthook</span> 2.2.2: local <span class="t">Git</span> hooks</p></section><div class="ar" aria-hidden="true">→</div><section class="box records"><h2>Services and <span class="t">Python</span></h2><p><span class="t">Node.js</span> 26: JS runtime<br/><span class="t">pnpm</span> 12.23.0: workspaces and scripts<br/><span class="t">Docker Compose</span>: local services<br/><span class="t">PostgreSQL</span> 16: provisioned infrastructure, unused by current code<br/>Runs: API in-memory <code>_RUNS</code> list in <code>apps/api/app/services/runs.py</code>, lost on API restart; artifacts: files under <code>storage/artifacts</code><br/><span class="t">Redis</span> 7: provisioned infrastructure, unused by current code<br/><span class="t">Python</span> ≥3.11: API and AI workers<br/><span class="t">FastAPI</span> ≥0.116.1: API routes<br/><span class="t">uvicorn</span> ≥0.35.0: API server<br/><span class="t">SQLAlchemy</span> ≥2.0.43 and <span class="t">psycopg</span> ≥3.2.9: declared database dependencies, unused by current code<br/><span class="t">pydantic-settings</span> ≥2.10.1 and <span class="t">email-validator</span> ≥2.2.0: configuration and validation<br/><span class="t">redis</span> ≥6.4.0 and <span class="t">celery</span> ≥5.5.3: declared service clients<br/><span class="t">httpx</span> ≥0.28.1: HTTP client<br/><span class="t">openai</span> ≥1.101.0 and <span class="t">pydantic</span> ≥2.11.7: analysis client and schemas<br/><span class="t">pytest</span> ≥8.3.0 and <span class="t">Ruff</span> (CI installed, unpinned): <span class="t">Python</span> checks<br/><span class="t">GitHub Actions</span>: CI; checkout/setup-node/setup-python/upload-artifact v7, <span class="t">pnpm</span>/action-setup v6<br/><span class="t">actionlint</span> 1.7.12: workflow lint<br/><span class="t">Gitleaks</span> 8.30.1: full-history secret scan</p></section></div></div>
+<div class="lane"><h3>Example</h3><div class="tl"><section class="box user"> <span class="num">1</span><h2>Queue a checkout review</h2><p>An engineer enters a project, target URL and optional login in the local dashboard, then presses Queue run.</p><p class="small"><b>Uses:</b> <span class="t">Next.js</span> + <span class="t">Base UI</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box records"> <span class="num">2</span><h2>Collect and analyze</h2><p>The API creates a run. The browser saves page.png and evidence; the AI worker writes candidate findings.</p><p class="small"><b>Uses:</b> <span class="t">FastAPI</span> + <span class="t">Playwright</span> + <span class="t">OpenAI</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box import"> <span class="num">3</span><h2>Review and repeat</h2><p>The engineer selects the run, reviews evidence and opens findings. Escape closes the modal and returns focus. A later run repeats the same flow.</p><p class="small"><b>Uses:</b> <span class="t">React</span> + <span class="t">next-intl</span></p></section></div></div>
+<div class="lane"><h3>Create run</h3><div class="tl" style="--band: 40px"><section class="box agent"> <span class="num">1</span><h2>Who and what</h2><p>A product engineer queues a run in the dashboard form. Visible labels identify the project, environment, URL and optional login.</p><p class="small"><b>Uses:</b> <span class="t">Base UI</span> + <span class="t">next-intl</span> + <span class="t">FastAPI</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">2</span><h2>Why and when</h2><p>Use repeatable evidence collection when reviewing a page. Queueing disables the form and preserves values on error.</p><p class="small"><b>Uses:</b> <span class="t">Base UI</span> + <span class="t">next-intl</span> + <span class="t">FastAPI</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">3</span><h2>How and where</h2><p>Dashboard state in apps/web/components/dashboard sends POST /api/runs through lib/api.ts. Successful creation selects the run and clears the password.</p><p class="small"><b>Uses:</b> <span class="t">Base UI</span> + <span class="t">next-intl</span> + <span class="t">FastAPI</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">4</span><h2>With what and next</h2><p><span class="t">Base UI</span> fields and <span class="t">next-intl</span> messages keep the form accessible and English-only. <span class="t">FastAPI</span> orchestrates the local workers; raw API errors stay hidden.</p><p class="small"><b>Uses:</b> <span class="t">Base UI</span> + <span class="t">next-intl</span> + <span class="t">FastAPI</span></p></section><div class="backs" aria-hidden="true"><div class="bk b-agent" data-from="4" data-to="1" data-d="1"><span>Next run → repeat review</span></div></div></div><ul class="backtext"><li>Back paths:</li><li>Step 4 to step 1: another target needs review, so queue another run.</li></ul></div>
+<div class="lane"><h3>Browser worker</h3><div class="tl" style="--band: 40px"><section class="box agent"> <span class="num">1</span><h2>Who and what</h2><p>The API launches workers/browser for a run; the worker visits the target and optionally attempts login.</p><p class="small"><b>Uses:</b> <span class="t">Playwright</span> 1.65.1 + <span class="t">axe-core</span> 4.14.0 + <span class="t">Zod</span> 4.6.7</p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">2</span><h2>Why and when</h2><p>Before analysis, gather observable evidence so findings have a concrete basis. URL safety checks restrict unsafe targets.</p><p class="small"><b>Uses:</b> <span class="t">Playwright</span> 1.65.1 + <span class="t">axe-core</span> 4.14.0 + <span class="t">Zod</span> 4.6.7</p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">3</span><h2>How and where</h2><p><span class="t">Playwright</span> collects screenshot, actions, console messages, failed requests, HTTP errors and accessibility observations in storage/artifacts/&lt;run-id&gt;.</p><p class="small"><b>Uses:</b> <span class="t">Playwright</span> 1.65.1 + <span class="t">axe-core</span> 4.14.0 + <span class="t">Zod</span> 4.6.7</p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">4</span><h2>With what and next</h2><p><span class="t">Playwright</span> and <span class="t">axe-core</span> create browser evidence. Shared <span class="t">Zod</span> schemas describe contracts. The API then invokes AI analysis.</p><p class="small"><b>Uses:</b> <span class="t">Playwright</span> 1.65.1 + <span class="t">axe-core</span> 4.14.0 + <span class="t">Zod</span> 4.6.7</p></section><div class="backs" aria-hidden="true"><div class="bk b-agent" data-from="4" data-to="1" data-d="1"><span>Next run → repeat review</span></div></div></div><ul class="backtext"><li>Back paths:</li><li>Step 4 to step 1: another target needs review, so queue another run.</li></ul></div>
+<div class="lane"><h3>AI analysis</h3><div class="tl" style="--band: 40px"><section class="box agent"> <span class="num">1</span><h2>Who and what</h2><p>The <span class="t">Python</span> worker in workers/ai/app/main.py analyzes captured evidence and proposes findings with confidence and verification status.</p><p class="small"><b>Uses:</b> <span class="t">Python</span> + <span class="t">OpenAI</span> + <span class="t">Pydantic</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">2</span><h2>Why and when</h2><p>After browser collection, combine guideline checks with optional model-backed analysis. Humans still review suggestions.</p><p class="small"><b>Uses:</b> <span class="t">Python</span> + <span class="t">OpenAI</span> + <span class="t">Pydantic</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">3</span><h2>How and where</h2><p>RUN_ID and ARTIFACT_LOCAL_DIR locate evidence; findings.json is written beside the artifacts. OPENAI_API_KEY enables model-backed analysis.</p><p class="small"><b>Uses:</b> <span class="t">Python</span> + <span class="t">OpenAI</span> + <span class="t">Pydantic</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">4</span><h2>With what and next</h2><p>The <span class="t">OpenAI</span> client uses OPENAI_MODEL, default <code class="model">gpt-4o-mini</code>. The <span class="m">QA analysis agent</span> suggests issues; <span class="t">Pydantic</span> validates structured findings for dashboard review.</p><p class="small"><b>Uses:</b> <span class="t">Python</span> + <span class="t">OpenAI</span> + <span class="t">Pydantic</span></p></section><div class="backs" aria-hidden="true"><div class="bk b-agent" data-from="4" data-to="1" data-d="1"><span>Next run → repeat review</span></div></div></div><ul class="backtext"><li>Back paths:</li><li>Step 4 to step 1: another target needs review, so queue another run.</li></ul></div>
+<div class="lane"><h3>Dashboard review</h3><div class="tl" style="--band: 40px"><section class="box agent"> <span class="num">1</span><h2>Who and what</h2><p>A reviewer selects a run, views timestamps and status, inspects the screenshot and evidence, then opens finding articles.</p><p class="small"><b>Uses:</b> <span class="t">React</span> + <span class="t">Base UI</span> + <span class="t">Tailwind CSS</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">2</span><h2>Why and when</h2><p>A four-second poll updates runs and selected detail. Refresh requests the list immediately; empty, loading and translated error states explain progress.</p><p class="small"><b>Uses:</b> <span class="t">React</span> + <span class="t">Base UI</span> + <span class="t">Tailwind CSS</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">3</span><h2>How and where</h2><p>Dashboard owns shared state; lib/api.ts aborts requests and selection guards reject stale responses. Findings show category, confidence, severity, verification, guideline and reproduction steps.</p><p class="small"><b>Uses:</b> <span class="t">React</span> + <span class="t">Base UI</span> + <span class="t">Tailwind CSS</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">4</span><h2>With what and next</h2><p><span class="t">Base UI</span> dialogs support keyboard focus and Escape. Confirming Clear all deletes runs and artifacts; Cancel preserves them. <span class="t">Tailwind</span> tokens follow system light/dark and contrast; motion-safe respects reduced motion.</p><p class="small"><b>Uses:</b> <span class="t">React</span> + <span class="t">Base UI</span> + <span class="t">Tailwind CSS</span></p></section><div class="backs" aria-hidden="true"><div class="bk b-agent" data-from="4" data-to="1" data-d="1"><span>Next run → repeat review</span></div></div></div><ul class="backtext"><li>Back paths:</li><li>Step 4 to step 1: another target needs review, so queue another run.</li></ul></div>
+<div class="lane"><h3>Tooling, hooks and CI</h3><div class="tl" style="--band: 40px"><section class="box agent"> <span class="num">1</span><h2>Who and what</h2><p>Developers use root <span class="t">pnpm</span> scripts for all <span class="t">TypeScript</span> packages. <span class="t">Python</span> keeps separate <span class="t">Ruff</span> and <span class="t">pytest</span> commands.</p><p class="small"><b>Uses:</b> <span class="t">pnpm</span> + <span class="t">Lefthook</span> + <span class="t">GitHub Actions</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">2</span><h2>Why and when</h2><p>Before commit, <span class="t">Lefthook</span> formats staged files, runs package-root <span class="t">ESLint</span> fixes and checks <span class="t">Tailwind</span>. Before push, it runs <span class="t">pnpm</span> validate.</p><p class="small"><b>Uses:</b> <span class="t">pnpm</span> + <span class="t">Lefthook</span> + <span class="t">GitHub Actions</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">3</span><h2>How and where</h2><p>lefthook.yaml defines monorepo roots. .github/workflows/ci.yml validates, tests, builds, lints workflows and scans full <span class="t">Git</span> history on PRs and master/development pushes.</p><p class="small"><b>Uses:</b> <span class="t">pnpm</span> + <span class="t">Lefthook</span> + <span class="t">GitHub Actions</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box agent"> <span class="num">4</span><h2>With what and next</h2><p><span class="t">GitHub Actions</span> uses <span class="t">Node</span> 26 and frozen installs. E2E follows validation on manual dispatch or PRs to master; failures upload a 14-day HTML report. Lockfile synchronization is required after manifest changes.</p><p class="small"><b>Uses:</b> <span class="t">pnpm</span> + <span class="t">Lefthook</span> + <span class="t">GitHub Actions</span></p></section><div class="backs" aria-hidden="true"><div class="bk b-agent" data-from="4" data-to="1" data-d="1"><span>Next run → repeat review</span></div></div></div><ul class="backtext"><li>Back paths:</li><li>Step 4 to step 1: another target needs review, so queue another run.</li></ul></div>
+<div class="lane"><h3>Run and test</h3><div class="tl"><section class="box user"> <span class="num">1</span><h2>Local development</h2><p>From the repository root, start Docker services, install dependencies with <span class="t">pnpm</span> install, then <span class="t">pnpm</span> dev. <span class="t">pnpm</span> dev:web starts only the web; API uses <span class="t">uvicorn</span> app.main:app --reload --port 8000 from apps/api. NEXT_PUBLIC_API_BASE_URL must reach the API. See .env.example for configuration.</p><p class="small"><b>Uses:</b> <span class="t">Docker Compose</span> + <span class="t">pnpm</span> + <span class="t">uvicorn</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box safety"> <span class="num">2</span><h2><span class="t">JavaScript</span> verification</h2><p>From the repository root, run <span class="t">pnpm</span> validate, <span class="t">pnpm</span> test, <span class="t">pnpm</span> e2e and <span class="t">pnpm</span> build. <span class="t">Vitest</span> covers UI, API, theme contrast, polling and stale responses; <span class="t">Playwright</span> mocks localhost:8000 and covers review, queue, clear, focus, tab order and reduced motion. Install Chromium before E2E. CI also runs <span class="t">actionlint</span> for workflows and <span class="t">Gitleaks</span> for secrets.</p><p class="small"><b>Uses:</b> <span class="t">ESLint</span> + <span class="t">Prettier</span> + <span class="t">TypeScript</span> + <span class="t">Vitest</span> + <span class="t">Playwright</span></p></section><div class="ar" aria-hidden="true">→</div><section class="box safety"> <span class="num">3</span><h2><span class="t">Python</span> verification</h2><p>Keep the existing commands: ruff check apps workers; ruff format --check apps workers; python -m <span class="t">pytest</span> -v inside apps/api and workers/ai. <span class="t">Python</span> files and dev.sh are outside this tooling migration.</p><p class="small"><b>Uses:</b> <span class="t">Ruff</span> + <span class="t">pytest</span></p></section></div></div>
+<div class="lane"><h3>Folders</h3><div class="tl"><section class="box user"><h2>Screens and messages</h2><p>apps/web/app: server entry, metadata, icon and theme.<br/>components/UI: reusable primitives.<br/>components/dashboard: form, pipeline, run list/detail, evidence and findings.<br/>i18n and messages/en: registered, typed English namespaces.<br/>lib: API, date and class helpers.<br/>test and e2e: fixtures, render helper and browser flows.</p></section><div class="ar" aria-hidden="true">→</div><section class="box records"><h2>Services and operations</h2><p>apps/api: routes, schemas and orchestration.<br/>workers/browser: evidence collector.<br/>workers/ai: analysis.<br/>packages/shared-types: contracts.<br/>infrastructure/docker: service compose file.<br/>storage/artifacts: per-run output.<br/>.github/workflows: CI.<br/>Root manifests and lefthook.yaml: JS tooling.<br/>AGENTS.md and README.md: working rules and commands.<br/>docs/app-overview.html: this self-contained map.</p></section></div></div>
+      </div>
+    </main>
+    <aside class="zoomhelp" aria-label="Zoom help">
+      <ul>
+        <li>Cmd + drag: zoom into an area</li>
+        <li>Cmd + scroll, or pinch: zoom in and out</li>
+        <li>Cmd + 0: back to full width</li>
+      </ul>
+    </aside>
+    <script>
+      ;(function () {
+        function place() {
+          Array.prototype.forEach.call(document.querySelectorAll('.tl'), function (tl) {
+            var b = tl.querySelectorAll(':scope > .box')
+            if (!b.length) return
+            var bottom = b[0].offsetTop + b[0].offsetHeight,
+              n = {}
+            Array.prototype.forEach.call(tl.querySelectorAll('.bk'), function (a) {
+              var f = b[a.dataset.from - 1],
+                t = b[a.dataset.to - 1]
+              if (!f || !t) return
+              var k = (n[a.dataset.to] = (n[a.dataset.to] || 0) + 1),
+                x1 = t.offsetLeft + t.offsetWidth / 2 + (k - 1) * 10,
+                x2 = f.offsetLeft + f.offsetWidth / 2
+              a.style.left = x1 + 'px'
+              a.style.width = Math.max(0, x2 - x1) + 'px'
+              a.style.top = bottom + 'px'
+              a.style.height = 18 + (a.dataset.d - 1) * 24 + 'px'
+              a.style.visibility = 'visible'
+            })
+          })
+        }
+        place()
+        window.addEventListener('resize', place)
+        window.addEventListener('load', place)
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(place)
+
+        // Zoom: CSS zoom on main via --z. Cmd/Ctrl + drag a box to zoom to it; Cmd/Ctrl + wheel zooms at the pointer.
+        var main = document.getElementById('strip'),
+          root = document.documentElement,
+          zoom = 1,
+          userZoomed = false,
+          MIN = 0.2,
+          MAX = 1,
+          drag = null,
+          box = document.createElement('div')
+        box.className = 'zoombox'
+        box.hidden = true
+        document.body.appendChild(box)
+
+        function clamp(z) {
+          return Math.min(MAX, Math.max(MIN, z))
+        }
+        // main's top-left in page (scroll-inclusive) pixels; not affected by its own zoom
+        function origin() {
+          var r = main.getBoundingClientRect()
+          return { x: r.left + window.pageXOffset, y: r.top + window.pageYOffset }
+        }
+        // Zoom to z so that content point (cx, cy) ends up at client position (px, py).
+        function zoomTo(z, cx, cy, px, py) {
+          var o = origin()
+          zoom = clamp(z)
+          main.style.setProperty('--z', zoom)
+          window.scrollTo(o.x + cx * zoom - px, o.y + cy * zoom - py)
+          place()
+        }
+        function zoomAt(z, px, py) {
+          var o = origin()
+          zoomTo(
+            z,
+            (window.pageXOffset + px - o.x) / zoom,
+            (window.pageYOffset + py - o.y) / zoom,
+            px,
+            py
+          )
+        }
+        function norm(e) {
+          var x = Math.min(drag.x, e.clientX),
+            y = Math.min(drag.y, e.clientY)
+          return { x: x, y: y, w: Math.abs(e.clientX - drag.x), h: Math.abs(e.clientY - drag.y) }
+        }
+        function end() {
+          drag = null
+          box.hidden = true
+          document.body.classList.remove('zooming')
+        }
+        window.addEventListener('pointerdown', function (e) {
+          if (e.pointerType !== 'mouse' || e.button !== 0 || !e.isPrimary) return
+          if (!(e.metaKey || e.ctrlKey)) return // plain drag stays normal browser behaviour
+          if (e.clientX >= root.clientWidth || e.clientY >= root.clientHeight) return // scrollbar
+          e.preventDefault()
+          drag = { x: e.clientX, y: e.clientY }
+          document.body.classList.add('zooming')
+          var sel = window.getSelection && window.getSelection()
+          if (sel) sel.removeAllRanges()
+        })
+        window.addEventListener('pointermove', function (e) {
+          if (!drag) return
+          var r = norm(e)
+          box.style.left = r.x + 'px'
+          box.style.top = r.y + 'px'
+          box.style.width = r.w + 'px'
+          box.style.height = r.h + 'px'
+          box.hidden = false
+        })
+        window.addEventListener('pointerup', function (e) {
+          if (!drag) return
+          var r = norm(e)
+          end()
+          if (r.w < 10 || r.h < 10) return
+          userZoomed = true
+          var o = origin(),
+            vw = root.clientWidth,
+            vh = root.clientHeight,
+            cx = (window.pageXOffset + r.x + r.w / 2 - o.x) / zoom,
+            cy = (window.pageYOffset + r.y + r.h / 2 - o.y) / zoom
+          zoomTo(zoom * Math.min(vw / r.w, vh / r.h), cx, cy, vw / 2, vh / 2)
+        })
+        window.addEventListener('pointercancel', end)
+        window.addEventListener('blur', end)
+        window.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && drag) end()
+          // Cmd/Ctrl + 0: back to the default fitted view (phone layout: leave to the browser)
+          if (
+            (e.metaKey || e.ctrlKey) &&
+            (e.key === '0' || e.code === 'Digit0' || e.code === 'Numpad0') &&
+            !window.matchMedia('(max-width: 600px)').matches
+          ) {
+            e.preventDefault()
+            userZoomed = false
+            fit()
+          }
+        })
+        document.addEventListener('selectstart', function (e) {
+          if (drag) e.preventDefault()
+        })
+        window.addEventListener(
+          'wheel',
+          function (e) {
+            if (!e.metaKey && !e.ctrlKey) return
+            e.preventDefault()
+            userZoomed = true
+            zoomAt(zoom * Math.exp(-e.deltaY * 0.002), e.clientX, e.clientY)
+          },
+          { passive: false }
+        )
+
+        // Default view: fit the width of main in the window (never above 1) until the user zooms.
+        // Height is ignored; the user scrolls down through the rows.
+        // Phone layout is left at zoom 1 (native pinch).
+        function fit() {
+          if (userZoomed || window.matchMedia('(max-width: 600px)').matches) return
+          main.style.setProperty('--z', 1) // measure unzoomed
+          place()
+          var w = main.offsetWidth
+          if (!w) return
+          var f = Math.min(1, root.clientWidth / w)
+          MIN = Math.min(0.2, f)
+          zoom = clamp(f)
+          main.style.setProperty('--z', zoom)
+          window.scrollTo(0, 0)
+          place()
+        }
+        fit()
+        window.addEventListener('load', fit)
+        window.addEventListener('resize', fit)
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit)
+      })()
+    </script>
+  </body>
+</html>
